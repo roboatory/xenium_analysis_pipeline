@@ -1,19 +1,18 @@
-project_root: "."
-data_dir: "/Users/rohit/Desktop/prostate_cancer/data/output-XETG00171__0050702__Region_2__20250606__163112"
-outputs_dir: "../outputs"
+data_directory: "../data/output-XETG00171__0050702__Region_2__20250606__163112"
+output_directory: "../output/output-XETG00171__0050702__Region_2__20250606__163112"
 
 pipeline:
-  min_counts: 200
-  max_counts_quantile: 0.99
-  min_cells: 100
+  minimum_counts: 200
+  maximum_counts_quantile: 0.99
+  minimum_cells: 100
   n_top_genes: 2000
-  n_comps: 30
+  n_components: 30
   leiden_resolution: 0.5
   rank_top_n: 30
-  min_logfc: 0.5
-  max_adj_pval: 0.05
+  minimum_logarithm_fold_change: 0.5
+  maximum_adjusted_p_value: 0.05
 
 plots:
-  plot_boundaries: false
-  plot_transcripts: false
-  genes_to_plot: []
+  plot_boundaries: true
+  plot_transcripts: true
+  genes_to_plot: ["TUBB", "CDH1"]

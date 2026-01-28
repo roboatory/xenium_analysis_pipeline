@@ -31,7 +31,9 @@ def _resolve_out_path(
     if out_path is None:
         if config is None:
             raise ValueError("out_path or config must be provided.")
-        out_path = config.figures_dir / default_name
+        if config.figures_directory is None:
+            raise ValueError("Configuration not loaded. Call load_from_yaml() first.")
+        out_path = config.figures_directory / default_name
     return Path(os.path.expanduser(str(out_path)))
 
 
