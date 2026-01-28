@@ -1,0 +1,19 @@
+project_root: "."
+data_dir: "/Users/rohit/Desktop/prostate_cancer/data/output-XETG00171__0050702__Region_2__20250606__163112"
+outputs_dir: "../outputs"
+
+pipeline:
+  min_counts: 200
+  max_counts_quantile: 0.99
+  min_cells: 100
+  n_top_genes: 2000
+  n_comps: 30
+  leiden_resolution: 0.5
+  rank_top_n: 30
+  min_logfc: 0.5
+  max_adj_pval: 0.05
+
+plots:
+  plot_boundaries: false
+  plot_transcripts: false
+  genes_to_plot: []
