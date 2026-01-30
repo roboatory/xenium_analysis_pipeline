@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +10,7 @@ import yaml
 @dataclass(frozen=True)
 class PipelineConfig:
     """Configuration for analysis pipeline parameters.
-    
+
     This bundles together:
     - the minimum number of counts per cell
     - the maximum counts quantile
@@ -34,7 +34,7 @@ class PipelineConfig:
     maximum_adjusted_p_value: float = 0.05
 
     @classmethod
-    def from_dictionary(cls, data: dict[str, Any]) -> "PipelineConfig":
+    def from_dictionary(cls, data: dict[str, Any]) -> PipelineConfig:
         """Create from a raw dictionary (typically loaded from YAML)."""
 
         return cls(
@@ -65,13 +65,13 @@ class PlotsConfig:
     genes_to_plot: tuple[str, ...] = ()
 
     @classmethod
-    def from_dictionary(cls, data: dict[str, Any]) -> "PlotsConfig":
+    def from_dictionary(cls, data: dict[str, Any]) -> PlotsConfig:
         """Create from a raw dictionary (typically loaded from YAML)."""
-        
+
         return cls(
             plot_boundaries=data["plot_boundaries"],
             plot_transcripts=data["plot_transcripts"],
-            genes_to_plot=tuple[str, ...](data["genes_to_plot"]),
+            genes_to_plot=tuple(data["genes_to_plot"]),
         )
 
 
@@ -93,7 +93,6 @@ class Config:
     pipeline: PipelineConfig | None = None
     plots: PlotsConfig | None = None
 
-
     def load_from_yaml(self, configuration_path: Path) -> None:
         """Load configuration from a YAML file and populate this instance."""
 
@@ -102,7 +101,7 @@ class Config:
 
         raw_data_directory = Path(configuration["data_directory"]).resolve()
         output_directory = Path(configuration["output_directory"]).resolve()
-        
+
         self.raw_data_directory = raw_data_directory
         self.output_directory = output_directory
         self.processed_data_directory = output_directory / "processed"
@@ -110,7 +109,6 @@ class Config:
         self.figures_directory = output_directory / "figures"
         self.pipeline = PipelineConfig.from_dictionary(configuration["pipeline"])
         self.plots = PlotsConfig.from_dictionary(configuration["plots"])
-
 
     def create_directories(self) -> None:
         """Ensure all output directories exist. Raises ValueError if configuration is not loaded."""

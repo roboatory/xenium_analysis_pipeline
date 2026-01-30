@@ -9,4 +9,12 @@ dependencies = [
     "scanpy>=1.12",
     "scikit-misc>=0.5.2",
     "spatialdata-io>=0.5.1",
+    "spatialdata-plot>=0.2.13",
+    "squidpy>=1.7.0",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5.1",
+    "ruff>=0.14.14",
 ]
