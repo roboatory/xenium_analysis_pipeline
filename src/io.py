@@ -56,6 +56,32 @@ def write_enriched_genes(
         json.dump(gene_lists_by_cluster, file_handle, indent=2)
 
 
+def write_cluster_annotations(
+    cluster_annotations: dict[str, dict[str, str | float]],
+    configuration: Config,
+) -> None:
+    """Write LLM cluster annotations (label/confidence/rationale) to JSON."""
+
+    annotations_path = configuration.results_directory / "cluster_annotations.json"
+    with annotations_path.open("w") as file_handle:
+        json.dump(cluster_annotations, file_handle, indent=2)
+
+
+def load_enriched_genes(configuration: Config) -> dict[str, list[str]]:
+    """Load enriched genes per cluster from the analysis directory JSON."""
+
+    enriched_genes_path = (
+        configuration.results_directory / "cluster_enriched_genes.json"
+    )
+    with enriched_genes_path.open("r") as file_handle:
+        data = json.load(file_handle)
+
+    return {
+        str(cluster_id): [str(gene) for gene in genes]
+        for cluster_id, genes in data.items()
+    }
+
+
 def write_spatialdata_zarr(
     spatial_data: SpatialData,
     annotated_data: AnnData | None,
