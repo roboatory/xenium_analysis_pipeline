@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from anndata import AnnData
 import json
-from typing import Literal
+import shutil
+from uuid import uuid4
 
 from spatialdata import SpatialData, read_zarr
 from spatialdata_io import xenium
@@ -16,13 +17,10 @@ def load_xenium(configuration: Config) -> SpatialData:
     return xenium(configuration.raw_data_directory)
 
 
-def read_spatialdata_zarr(
-    configuration: Config,
-    output: Literal["ingested", "processed"],
-) -> SpatialData:
-    """Read ingested or processed zarr file from the processed data directory."""
+def read_spatialdata_zarr(configuration: Config) -> SpatialData:
+    """Read processed zarr file from the processed data directory."""
 
-    return read_zarr(configuration.processed_data_directory / f"{output}.zarr")
+    return read_zarr(configuration.processed_data_directory / "processed.zarr")
 
 
 def write_cluster_labels(
@@ -86,11 +84,34 @@ def write_spatialdata_zarr(
     spatial_data: SpatialData,
     annotated_data: AnnData | None,
     configuration: Config,
-    output: Literal["ingested", "processed"],
 ) -> None:
-    """Write spatial data to ingested.zarr or processed.zarr."""
+    """Write processed spatial data zarr atomically."""
+
+    target_path = configuration.processed_data_directory / "processed.zarr"
+    temporary_path = target_path.parent / f".{target_path.name}.tmp-{uuid4().hex}"
+    backup_path = target_path.parent / f".{target_path.name}.bak-{uuid4().hex}"
+
+    if temporary_path.exists():
+        shutil.rmtree(temporary_path)
+    if backup_path.exists():
+        shutil.rmtree(backup_path)
 
     spatial_data["table"] = annotated_data
-    spatial_data.write(
-        configuration.processed_data_directory / f"{output}.zarr", overwrite=True
-    )
+    spatial_data.write(temporary_path, overwrite=True)
+
+    replaced_existing = False
+    try:
+        if target_path.exists():
+            target_path.rename(backup_path)
+            replaced_existing = True
+
+        temporary_path.rename(target_path)
+    except Exception:
+        if replaced_existing and backup_path.exists() and not target_path.exists():
+            backup_path.rename(target_path)
+        raise
+    finally:
+        if temporary_path.exists():
+            shutil.rmtree(temporary_path)
+        if backup_path.exists() and target_path.exists():
+            shutil.rmtree(backup_path)
