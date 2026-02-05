@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from anndata import AnnData
+import pandas as pd
 import scanpy as sc
 
 
@@ -63,3 +64,42 @@ def compute_enriched_genes(
         gene_lists_by_cluster[str(cluster)] = genes
 
     return gene_lists_by_cluster
+
+
+def build_domain_signatures(
+    annotated_data: AnnData,
+    *,
+    domain_key: str = "spatial_domain",
+    composition_key: str = "neighborhood_composition",
+    composition_labels_key: str = "neighborhood_composition_labels",
+    top_n: int = 6,
+) -> dict[str, list[str]]:
+    """Summarize each spatial domain by dominant neighborhood components."""
+
+    if composition_key not in annotated_data.obsm:
+        raise KeyError(
+            f"Missing composition key `{composition_key}` in `annotated_data.obsm`."
+        )
+    if composition_labels_key not in annotated_data.uns:
+        raise KeyError(
+            f"Missing composition label key `{composition_labels_key}` in `annotated_data.uns`."
+        )
+    if domain_key not in annotated_data.obs:
+        raise KeyError(f"Missing domain key `{domain_key}` in `annotated_data.obs`.")
+
+    component_labels = [
+        str(label) for label in annotated_data.uns[composition_labels_key]
+    ]
+    composition_dataframe = pd.DataFrame(
+        annotated_data.obsm[composition_key],
+        index=annotated_data.obs_names,
+        columns=component_labels,
+    )
+    domain_values = annotated_data.obs[domain_key].astype(str)
+    domain_means = composition_dataframe.groupby(domain_values, sort=True).mean()
+
+    signatures: dict[str, list[str]] = {}
+    for domain_id, row in domain_means.iterrows():
+        top_components = row.sort_values(ascending=False).head(top_n).index.tolist()
+        signatures[str(domain_id)] = [str(component) for component in top_components]
+    return signatures

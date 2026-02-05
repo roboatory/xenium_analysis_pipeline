@@ -10,6 +10,7 @@ def annotate_clusters_with_llm(
     gene_lists_by_cluster: dict[str, list[str]],
     *,
     model: str = "llama3.1:8b",
+    evidence_type: str = "marker_genes",
     host: str = "http://localhost:11434",
     temperature: float = 0.0,
     timeout_seconds: int = 120,
@@ -18,6 +19,12 @@ def annotate_clusters_with_llm(
 
     if not gene_lists_by_cluster:
         return {}
+
+    evidence_label = (
+        "marker genes"
+        if evidence_type == "marker_genes"
+        else "dominant neighboring cell types"
+    )
 
     response = _ollama_chat(
         payload={
@@ -28,13 +35,16 @@ def annotate_clusters_with_llm(
                     "content": (
                         "You are a domain expert in prostate cancer spatial transcriptomics. "
                         "Use maximally specific labels (lineage + subtype + state), keep "
-                        "labels biologically plausible from markers, and keep every cluster "
-                        "cell_type string globally unique. Return JSON only."
+                        f"labels biologically plausible from {evidence_label}, and keep every "
+                        "cluster cell_type string globally unique. Return JSON only."
                     ),
                 },
                 {
                     "role": "user",
-                    "content": _build_annotation_prompt(gene_lists_by_cluster),
+                    "content": _build_annotation_prompt(
+                        gene_lists_by_cluster,
+                        evidence_type=evidence_type,
+                    ),
                 },
             ],
             "format": _annotation_schema(),
@@ -61,20 +71,28 @@ def annotate_clusters_with_llm(
 
 def _build_annotation_prompt(
     gene_lists_by_cluster: dict[str, list[str]],
+    *,
+    evidence_type: str = "marker_genes",
 ) -> str:
     """Build prompt with schema and per-cluster markers."""
 
+    is_marker_mode = evidence_type == "marker_genes"
+    evidence_label = (
+        "marker genes" if is_marker_mode else "dominant neighboring cell types"
+    )
+    support_phrase = "marker-supported" if is_marker_mode else "composition-supported"
+
     lines = [
-        "Annotate each cluster with one main cell type label from marker genes.",
+        f"Annotate each cluster with one main cell type label from {evidence_label}.",
         "Be as specific as possible (lineage + subtype + functional state).",
-        "If clusters are similar, disambiguate using marker-supported states.",
+        f"If clusters are similar, disambiguate using {support_phrase} states.",
         "Cell type labels must be globally unique across clusters.",
         "Return JSON using this schema only:",
         '{ "annotations": [{ "cluster_id": "0", "cell_type": "label", "confidence": 0.0, "rationale": "..." }] }',
         "Confidence must be a number in [0, 1].",
-        "Rationale should be 1-2 sentences with discriminating markers.",
+        f"Rationale should be 1-2 sentences with discriminating {evidence_label}.",
         "",
-        "Clusters and marker genes:",
+        f"Clusters and {evidence_label}:",
     ]
     for cluster_id, genes in sorted(
         gene_lists_by_cluster.items(), key=lambda item: item[0]

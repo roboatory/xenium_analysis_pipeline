@@ -16,9 +16,6 @@ import pandas as pd  # noqa: E402
 from src import analysis, annotation, colocalization, io, plotting, preprocessing  # noqa: E402
 from src.config import Config  # noqa: E402
 
-SPATIAL_CLUSTER_KEY = "leiden"
-SPATIAL_DOMAIN_KEY = "spatial_domain"
-
 
 @dataclass(frozen=True)
 class StagePaths:
@@ -27,6 +24,7 @@ class StagePaths:
     cluster_labels_path: Path
     annotations_path: Path
     domain_labels_path: Path
+    domain_annotations_path: Path
     state_path: Path
 
 
@@ -170,7 +168,9 @@ def _build_stage_paths(configuration: Config) -> StagePaths:
         cluster_labels_path=configuration.results_directory / "leiden_clusters.csv",
         annotations_path=configuration.results_directory / "cluster_annotations.json",
         domain_labels_path=configuration.results_directory
-        / f"{SPATIAL_DOMAIN_KEY}_labels.csv",
+        / "spatial_domain_labels.csv",
+        domain_annotations_path=configuration.results_directory
+        / "spatial_domain_annotations.json",
         state_path=configuration.results_directory / "state.json",
     )
 
@@ -227,6 +227,7 @@ def _should_run_colocalization_stage(
         or should_run_process_stage
         or should_run_annotate_stage
         or not paths.domain_labels_path.exists()
+        or not paths.domain_annotations_path.exists()
         or state_cache.get("colocalization_signature") != colocalization_signature
         or state_cache.get("colocalization_dependency_annotate_signature")
         != annotate_signature
@@ -282,10 +283,6 @@ def _run_ingestion_preprocessing_stage(configuration: Config) -> None:
         configuration.pipeline.leiden_resolution,
     )
     analysis.run_umap(annotated_data)
-
-    plotting.plot_umap_leiden(spatial_data, configuration)
-    plotting.plot_cluster_overlay(spatial_data, configuration)
-
     analysis.rank_genes(annotated_data)
     enriched_gene_lists = analysis.compute_enriched_genes(
         annotated_data,
@@ -343,24 +340,43 @@ def _run_colocalization_stage(
 
     colocalization.compute_neighborhood_composition(
         annotated_data,
-        cluster_key=SPATIAL_CLUSTER_KEY,
+        cluster_key="leiden",
         radius=configuration.pipeline.neighborhood_radius,
     )
     colocalization.assign_spatial_domains(
         annotated_data,
         n_clusters=configuration.pipeline.domain_n_clusters,
-        domain_key=SPATIAL_DOMAIN_KEY,
+        domain_key="spatial_domain",
+    )
+    domain_signatures = analysis.build_domain_signatures(
+        annotated_data,
+        domain_key="spatial_domain",
+    )
+    domain_annotations = annotation.annotate_clusters_with_llm(
+        domain_signatures,
+        model=configuration.annotation_model,
+        evidence_type="neighborhood_cell_types",
+    )
+    io.write_domain_annotations(
+        domain_annotations,
+        configuration,
+        domain_key="spatial_domain",
+    )
+    annotated_data.obs["spatial_domain_label"] = (
+        annotated_data.obs["spatial_domain"]
+        .astype(str)
+        .map(
+            {
+                domain_id: value["cell_type"]
+                for domain_id, value in domain_annotations.items()
+            }
+        )
     )
 
-    plotting.plot_cluster_overlay(
-        spatial_data,
-        configuration,
-        cluster_key=SPATIAL_DOMAIN_KEY,
-    )
     io.write_spatial_domains(
         annotated_data,
         configuration,
-        domain_key=SPATIAL_DOMAIN_KEY,
+        domain_key="spatial_domain",
     )
 
     spatial_data["table"] = annotated_data
@@ -428,6 +444,19 @@ def main() -> None:
         state_cache["colocalization_dependency_annotate_signature"] = annotate_signature
         state_cache["run_configuration_settings"] = run_configuration_settings
         _save_state(paths.state_path, state_cache)
+
+    spatial_data = io.read_spatialdata_zarr(configuration)
+    plotting.plot_umap_leiden(spatial_data, configuration, cluster_key="cell_type")
+    plotting.plot_cluster_overlay(
+        spatial_data,
+        configuration,
+        cluster_key="cell_type",
+    )
+    plotting.plot_cluster_overlay(
+        spatial_data,
+        configuration,
+        cluster_key="spatial_domain_label",
+    )
 
 
 if __name__ == "__main__":

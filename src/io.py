@@ -84,6 +84,20 @@ def write_cluster_annotations(
         json.dump(cluster_annotations, file_handle, indent=2)
 
 
+def write_domain_annotations(
+    domain_annotations: dict[str, dict[str, str | float]],
+    configuration: Config,
+    domain_key: str = "spatial_domain",
+) -> None:
+    """Write LLM spatial-domain annotations to JSON."""
+
+    annotations_path = (
+        configuration.results_directory / f"{domain_key}_annotations.json"
+    )
+    with annotations_path.open("w") as file_handle:
+        json.dump(domain_annotations, file_handle, indent=2)
+
+
 def write_spatialdata_zarr(
     spatial_data: SpatialData,
     annotated_data: AnnData | None,

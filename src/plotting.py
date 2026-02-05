@@ -13,6 +13,7 @@ from spatialdata import SpatialData
 import spatialdata_plot  # noqa: F401
 
 from anndata import AnnData
+import pandas as pd
 
 
 def plot_cell_and_nucleus_boundaries(
@@ -144,10 +145,11 @@ def plot_umap_leiden(
     configuration: Config,
     out_path: str | Path | None = None,
     table_key: str = "table",
+    cluster_key: str = "leiden",
 ):
     """Plot UMAP colored by Leiden clusters."""
 
-    out_path = configuration.figures_directory / "umap_leiden.png"
+    out_path = configuration.figures_directory / f"umap_{cluster_key}_leiden.png"
     annotated_data = spatial_data[table_key]
 
     _show = plt.show
@@ -155,7 +157,7 @@ def plot_umap_leiden(
     try:
         _dpi = 600
         umap_figure = sc.pl.umap(
-            annotated_data, color="leiden", show=False, return_fig=True
+            annotated_data, color=cluster_key, show=False, return_fig=True
         )
         umap_figure.savefig(out_path, bbox_inches="tight", dpi=_dpi)
         plt.close(umap_figure)
@@ -169,10 +171,14 @@ def plot_cluster_overlay(
     cell_key: str = "cell_boundaries",
     table_key: str = "table",
     cluster_key: str = "leiden",
+    cell_types_to_plot: list[str] | None = None,
 ) -> None:
     """Plot cell shapes colored by cluster labels (e.g. Leiden)."""
 
-    out_path = configuration.figures_directory / f"xenium_{cluster_key}_overlay.png"
+    out_path = (
+        configuration.figures_directory
+        / f"xenium_{cluster_key}_overlay_filter_{cell_types_to_plot}.png"
+    )
     table = spatial_data.tables[table_key]
     gdf = spatial_data.shapes[cell_key].copy()
 
@@ -182,6 +188,11 @@ def plot_cluster_overlay(
         cell_to_cluster = table.obs[cluster_key]
     gdf[cluster_key] = gdf.index.map(cell_to_cluster)
     gdf = gdf.dropna(subset=[cluster_key])
+
+    if cell_types_to_plot is not None:
+        gdf = gdf[gdf[cluster_key].isin(cell_types_to_plot)]
+        if pd.api.types.is_categorical_dtype(gdf[cluster_key].dtype):
+            gdf[cluster_key] = gdf[cluster_key].cat.remove_unused_categories()
 
     _show = plt.show
     plt.show = lambda: None
@@ -206,6 +217,7 @@ def plot_cluster_overlay(
         )
         ax.set_aspect("equal")
         ax.axis("off")
+        ax.invert_yaxis()
         fig.savefig(out_path, bbox_inches="tight", dpi=_dpi)
         plt.close(fig)
     finally:
