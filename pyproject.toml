@@ -6,11 +6,11 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "igraph>=1.0.0",
-    "scanpy>=1.12",
+    "scanpy>=1.11,<1.12",
     "scikit-misc>=0.5.2",
     "spatialdata-io>=0.5.1",
     "spatialdata-plot>=0.2.13",
-    "squidpy>=1.7.0",
+    "squidpy==1.7.0",
 ]
 
 [dependency-groups]

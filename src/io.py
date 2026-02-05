@@ -23,6 +23,21 @@ def read_spatialdata_zarr(configuration: Config) -> SpatialData:
     return read_zarr(configuration.processed_data_directory / "processed.zarr")
 
 
+def load_enriched_genes(configuration: Config) -> dict[str, list[str]]:
+    """Load enriched genes per cluster from the analysis directory JSON."""
+
+    enriched_genes_path = (
+        configuration.results_directory / "cluster_enriched_genes.json"
+    )
+    with enriched_genes_path.open("r") as file_handle:
+        data = json.load(file_handle)
+
+    return {
+        str(cluster_id): [str(gene) for gene in genes]
+        for cluster_id, genes in data.items()
+    }
+
+
 def write_cluster_labels(
     annotated_data: AnnData,
     configuration: Config,
@@ -32,7 +47,11 @@ def write_cluster_labels(
 
     cluster_dataframe = annotated_data.obs[[cluster_key]].copy()
     cluster_dataframe = cluster_dataframe.rename(columns={cluster_key: "group"})
-    cluster_dataframe.insert(0, "cell_id", annotated_data.obs["cell_id"].astype(str))
+    if "cell_id" in annotated_data.obs.columns:
+        cell_ids = annotated_data.obs["cell_id"].astype(str)
+    else:
+        cell_ids = annotated_data.obs_names.astype(str)
+    cluster_dataframe.insert(0, "cell_id", cell_ids)
     cluster_dataframe.to_csv(
         configuration.results_directory / f"{cluster_key}_clusters.csv",
         sep=",",
@@ -65,53 +84,43 @@ def write_cluster_annotations(
         json.dump(cluster_annotations, file_handle, indent=2)
 
 
-def load_enriched_genes(configuration: Config) -> dict[str, list[str]]:
-    """Load enriched genes per cluster from the analysis directory JSON."""
-
-    enriched_genes_path = (
-        configuration.results_directory / "cluster_enriched_genes.json"
-    )
-    with enriched_genes_path.open("r") as file_handle:
-        data = json.load(file_handle)
-
-    return {
-        str(cluster_id): [str(gene) for gene in genes]
-        for cluster_id, genes in data.items()
-    }
-
-
 def write_spatialdata_zarr(
     spatial_data: SpatialData,
     annotated_data: AnnData | None,
     configuration: Config,
 ) -> None:
-    """Write processed spatial data zarr atomically."""
+    """Write processed spatial data zarr using a simple temp-then-replace flow."""
 
     target_path = configuration.processed_data_directory / "processed.zarr"
     temporary_path = target_path.parent / f".{target_path.name}.tmp-{uuid4().hex}"
-    backup_path = target_path.parent / f".{target_path.name}.bak-{uuid4().hex}"
-
-    if temporary_path.exists():
-        shutil.rmtree(temporary_path)
-    if backup_path.exists():
-        shutil.rmtree(backup_path)
 
     spatial_data["table"] = annotated_data
     spatial_data.write(temporary_path, overwrite=True)
 
-    replaced_existing = False
     try:
         if target_path.exists():
-            target_path.rename(backup_path)
-            replaced_existing = True
-
+            shutil.rmtree(target_path)
         temporary_path.rename(target_path)
-    except Exception:
-        if replaced_existing and backup_path.exists() and not target_path.exists():
-            backup_path.rename(target_path)
-        raise
     finally:
         if temporary_path.exists():
             shutil.rmtree(temporary_path)
-        if backup_path.exists() and target_path.exists():
-            shutil.rmtree(backup_path)
+
+
+def write_spatial_domains(
+    annotated_data: AnnData,
+    configuration: Config,
+    domain_key: str = "spatial_domain",
+) -> None:
+    """Write spatial domain labels to CSV."""
+
+    domain_dataframe = annotated_data.obs[[domain_key]].copy()
+    domain_dataframe = domain_dataframe.rename(columns={domain_key: "domain"})
+    if "cell_id" in annotated_data.obs.columns:
+        cell_ids = annotated_data.obs["cell_id"].astype(str)
+    else:
+        cell_ids = annotated_data.obs_names.astype(str)
+    domain_dataframe.insert(0, "cell_id", cell_ids)
+    domain_dataframe.to_csv(
+        configuration.results_directory / f"{domain_key}_labels.csv",
+        index=False,
+    )

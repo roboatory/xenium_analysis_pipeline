@@ -172,7 +172,7 @@ def plot_cluster_overlay(
 ) -> None:
     """Plot cell shapes colored by cluster labels (e.g. Leiden)."""
 
-    out_path = configuration.figures_directory / "xenium_cluster_overlay.png"
+    out_path = configuration.figures_directory / f"xenium_{cluster_key}_overlay.png"
     table = spatial_data.tables[table_key]
     gdf = spatial_data.shapes[cell_key].copy()
 
