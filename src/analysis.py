@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from anndata import AnnData
+import pandas as pd
 import scanpy as sc
 
 
@@ -63,3 +64,33 @@ def compute_enriched_genes(
         gene_lists_by_cluster[str(cluster)] = genes
 
     return gene_lists_by_cluster
+
+
+def build_domain_signatures(
+    annotated_data: AnnData,
+    domain_key: str = "spatial_domain",
+    composition_key: str = "neighborhood_composition",
+    cluster_key: str = "cell_type",
+    top_n: int = 6,
+) -> dict[str, list[str]]:
+    """Summarize each spatial domain by dominant neighborhood components."""
+
+    component_labels = [
+        str(label)
+        for label in annotated_data.obs[cluster_key].astype("category").cat.categories
+    ]
+    composition_matrix = annotated_data.obsm[composition_key]
+    composition_dataframe = pd.DataFrame(
+        composition_matrix,
+        index=annotated_data.obs_names,
+        columns=component_labels,
+    )
+    domain_values = annotated_data.obs[domain_key].astype(str)
+    domain_means = composition_dataframe.groupby(domain_values, sort=True).mean()
+
+    signatures: dict[str, list[str]] = {}
+    for domain_id, row in domain_means.iterrows():
+        top_components = row.sort_values(ascending=False).head(top_n).index.tolist()
+        signatures[str(domain_id)] = [str(component) for component in top_components]
+
+    return signatures

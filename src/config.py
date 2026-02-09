@@ -21,6 +21,8 @@ class PipelineConfig:
     - the number of top genes to use for enrichment analysis
     - the minimum log fold change for enrichment analysis
     - the maximum adjusted p-value for enrichment analysis
+    - the neighborhood radius for spatial domains
+    - the number of spatial domains to infer with k-means
     """
 
     minimum_counts: int = 200
@@ -32,21 +34,41 @@ class PipelineConfig:
     rank_top_n: int = 30
     minimum_logarithm_fold_change: float = 0.5
     maximum_adjusted_p_value: float = 0.05
+    neighborhood_radius: float = 50.0
+    domain_n_clusters: int = 8
 
     @classmethod
     def from_dictionary(cls, data: dict[str, Any]) -> PipelineConfig:
         """Create from a raw dictionary (typically loaded from YAML)."""
 
+        defaults = cls()
         return cls(
-            minimum_counts=int(data["minimum_counts"]),
-            maximum_counts_quantile=float(data["maximum_counts_quantile"]),
-            minimum_cells=int(data["minimum_cells"]),
-            n_top_genes=int(data["n_top_genes"]),
-            n_components=int(data["n_components"]),
-            leiden_resolution=float(data["leiden_resolution"]),
-            rank_top_n=int(data["rank_top_n"]),
-            minimum_logarithm_fold_change=float(data["minimum_logarithm_fold_change"]),
-            maximum_adjusted_p_value=float(data["maximum_adjusted_p_value"]),
+            minimum_counts=int(data.get("minimum_counts", defaults.minimum_counts)),
+            maximum_counts_quantile=float(
+                data.get("maximum_counts_quantile", defaults.maximum_counts_quantile)
+            ),
+            minimum_cells=int(data.get("minimum_cells", defaults.minimum_cells)),
+            n_top_genes=int(data.get("n_top_genes", defaults.n_top_genes)),
+            n_components=int(data.get("n_components", defaults.n_components)),
+            leiden_resolution=float(
+                data.get("leiden_resolution", defaults.leiden_resolution)
+            ),
+            rank_top_n=int(data.get("rank_top_n", defaults.rank_top_n)),
+            minimum_logarithm_fold_change=float(
+                data.get(
+                    "minimum_logarithm_fold_change",
+                    defaults.minimum_logarithm_fold_change,
+                )
+            ),
+            maximum_adjusted_p_value=float(
+                data.get("maximum_adjusted_p_value", defaults.maximum_adjusted_p_value)
+            ),
+            neighborhood_radius=float(
+                data.get("neighborhood_radius", defaults.neighborhood_radius)
+            ),
+            domain_n_clusters=int(
+                data.get("domain_n_clusters", defaults.domain_n_clusters)
+            ),
         )
 
 
@@ -90,6 +112,7 @@ class Config:
     processed_data_directory: Path | None = None
     results_directory: Path | None = None
     figures_directory: Path | None = None
+    annotation_model: str = "llama3.1:8b"
     pipeline: PipelineConfig | None = None
     plots: PlotsConfig | None = None
 
@@ -107,11 +130,14 @@ class Config:
         self.processed_data_directory = output_directory / "processed"
         self.results_directory = output_directory / "analysis"
         self.figures_directory = output_directory / "figures"
+        self.annotation_model = str(
+            configuration.get("annotation_model", self.annotation_model)
+        )
         self.pipeline = PipelineConfig.from_dictionary(configuration["pipeline"])
         self.plots = PlotsConfig.from_dictionary(configuration["plots"])
 
     def create_directories(self) -> None:
-        """Ensure all output directories exist. Raises ValueError if configuration is not loaded."""
+        """Ensure all output directories exist."""
 
         for path in (
             self.processed_data_directory,

@@ -1,5 +1,6 @@
 data_directory: "../data/output-XETG00171__0050702__Region_2__20250606__163112"
 output_directory: "../output/output-XETG00171__0050702__Region_2__20250606__163112"
+annotation_model: "llama3.1:8b"
 
 pipeline:
   minimum_counts: 200
@@ -11,6 +12,8 @@ pipeline:
   rank_top_n: 30
   minimum_logarithm_fold_change: 0.5
   maximum_adjusted_p_value: 0.05
+  neighborhood_radius: 50.0
+  domain_n_clusters: 8
 
 plots:
   plot_boundaries: true
