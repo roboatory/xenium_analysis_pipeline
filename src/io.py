@@ -3,6 +3,7 @@ from __future__ import annotations
 from anndata import AnnData
 import json
 import shutil
+from typing import Any
 from uuid import uuid4
 
 from spatialdata import SpatialData, read_zarr
@@ -59,43 +60,44 @@ def write_cluster_labels(
     )
 
 
-def write_enriched_genes(
-    gene_lists_by_cluster: dict[str, list[str]],
+def _write_json(path, payload: Any) -> None:
+    """Write JSON payload to disk."""
+
+    with path.open("w") as file_handle:
+        json.dump(payload, file_handle, indent=2)
+
+
+def _build_obs_label_dataframe(
+    annotated_data: AnnData,
+    value_key: str,
+    output_column: str,
+):
+    """Build a labels dataframe with canonical `cell_id` first column."""
+
+    labels_dataframe = annotated_data.obs[[value_key]].copy()
+    labels_dataframe = labels_dataframe.rename(columns={value_key: output_column})
+    if "cell_id" in annotated_data.obs.columns:
+        cell_ids = annotated_data.obs["cell_id"].astype(str)
+    else:
+        cell_ids = annotated_data.obs_names.astype(str)
+    labels_dataframe.insert(0, "cell_id", cell_ids)
+    return labels_dataframe
+
+
+def write_annotations(
+    annotations: dict[str, dict[str, str | float]],
     configuration: Config,
-) -> None:
-    """Write the enriched genes to a JSON file."""
-
-    enriched_genes_path = (
-        configuration.results_directory / "cluster_enriched_genes.json"
-    )
-
-    with enriched_genes_path.open("w") as file_handle:
-        json.dump(gene_lists_by_cluster, file_handle, indent=2)
-
-
-def write_cluster_annotations(
-    cluster_annotations: dict[str, dict[str, str | float]],
-    configuration: Config,
-) -> None:
-    """Write LLM cluster annotations (label/confidence/rationale) to JSON."""
-
-    annotations_path = configuration.results_directory / "cluster_annotations.json"
-    with annotations_path.open("w") as file_handle:
-        json.dump(cluster_annotations, file_handle, indent=2)
-
-
-def write_domain_annotations(
-    domain_annotations: dict[str, dict[str, str | float]],
-    configuration: Config,
+    target: str,
     domain_key: str = "spatial_domain",
 ) -> None:
-    """Write LLM spatial-domain annotations to JSON."""
+    """Write cluster/domain annotation JSON artifacts."""
 
-    annotations_path = (
-        configuration.results_directory / f"{domain_key}_annotations.json"
-    )
-    with annotations_path.open("w") as file_handle:
-        json.dump(domain_annotations, file_handle, indent=2)
+    annotation_paths = {
+        "cluster": configuration.results_directory / "cluster_annotations.json",
+        "domain": configuration.results_directory / f"{domain_key}_annotations.json",
+    }
+    annotations_path = annotation_paths[target]
+    _write_json(annotations_path, annotations)
 
 
 def write_spatialdata_zarr(
@@ -120,21 +122,30 @@ def write_spatialdata_zarr(
             shutil.rmtree(temporary_path)
 
 
-def write_spatial_domains(
-    annotated_data: AnnData,
+def write_analysis_artifact(
     configuration: Config,
+    target: str,
+    enriched_genes: dict[str, list[str]] | None = None,
+    annotated_data: AnnData | None = None,
     domain_key: str = "spatial_domain",
 ) -> None:
-    """Write spatial domain labels to CSV."""
+    """Write enriched genes JSON or spatial domain labels CSV."""
 
-    domain_dataframe = annotated_data.obs[[domain_key]].copy()
-    domain_dataframe = domain_dataframe.rename(columns={domain_key: "domain"})
-    if "cell_id" in annotated_data.obs.columns:
-        cell_ids = annotated_data.obs["cell_id"].astype(str)
-    else:
-        cell_ids = annotated_data.obs_names.astype(str)
-    domain_dataframe.insert(0, "cell_id", cell_ids)
-    domain_dataframe.to_csv(
-        configuration.results_directory / f"{domain_key}_labels.csv",
-        index=False,
-    )
+    if target == "enriched_genes":
+        _write_json(
+            configuration.results_directory / "cluster_enriched_genes.json",
+            enriched_genes,
+        )
+        return
+
+    if target == "spatial_domains":
+        domain_dataframe = _build_obs_label_dataframe(
+            annotated_data,
+            value_key=domain_key,
+            output_column="domain",
+        )
+        domain_dataframe.to_csv(
+            configuration.results_directory / f"{domain_key}_labels.csv",
+            index=False,
+        )
+        return

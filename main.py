@@ -294,15 +294,17 @@ def _run_ingestion_preprocessing_stage(configuration: Config) -> None:
     plotting.plot_rank_genes_dotplot(annotated_data, configuration, n_genes=5)
 
     io.write_cluster_labels(annotated_data, configuration)
-    io.write_enriched_genes(enriched_gene_lists, configuration)
+    io.write_analysis_artifact(
+        configuration,
+        "enriched_genes",
+        enriched_genes=enriched_gene_lists,
+    )
 
     spatial_data["table"] = annotated_data
     io.write_spatialdata_zarr(spatial_data, annotated_data, configuration)
 
 
-def _run_annotation_stage(
-    configuration: Config,
-) -> None:
+def _run_annotation_stage(configuration: Config) -> None:
     """Run LLM-driven cell-type annotation and persist updated zarr."""
 
     spatial_data = io.read_spatialdata_zarr(configuration)
@@ -310,10 +312,11 @@ def _run_annotation_stage(
 
     enriched_gene_lists = io.load_enriched_genes(configuration)
     cluster_annotations = annotation.annotate_clusters_with_llm(
-        enriched_gene_lists,
+        annotation_evidence_by_cluster=enriched_gene_lists,
         model=configuration.annotation_model,
+        evidence_type="marker_genes",
     )
-    io.write_cluster_annotations(cluster_annotations, configuration)
+    io.write_annotations(cluster_annotations, configuration, "cluster")
 
     annotated_data.obs["cell_type"] = (
         annotated_data.obs["leiden"]
@@ -330,38 +333,26 @@ def _run_annotation_stage(
     io.write_spatialdata_zarr(spatial_data, annotated_data, configuration)
 
 
-def _run_colocalization_stage(
-    configuration: Config,
-) -> None:
+def _run_colocalization_stage(configuration: Config) -> None:
     """Run colocalization/neighborhood analysis and persist updated zarr."""
 
     spatial_data = io.read_spatialdata_zarr(configuration)
     annotated_data = spatial_data["table"]
 
     colocalization.compute_neighborhood_composition(
-        annotated_data,
-        cluster_key="leiden",
-        radius=configuration.pipeline.neighborhood_radius,
+        annotated_data, configuration.pipeline.neighborhood_radius
     )
     colocalization.assign_spatial_domains(
-        annotated_data,
-        n_clusters=configuration.pipeline.domain_n_clusters,
-        domain_key="spatial_domain",
+        annotated_data, configuration.pipeline.domain_n_clusters
     )
-    domain_signatures = analysis.build_domain_signatures(
-        annotated_data,
-        domain_key="spatial_domain",
-    )
+    domain_signatures = analysis.build_domain_signatures(annotated_data)
     domain_annotations = annotation.annotate_clusters_with_llm(
-        domain_signatures,
+        annotation_evidence_by_cluster=domain_signatures,
         model=configuration.annotation_model,
         evidence_type="neighborhood_cell_types",
     )
-    io.write_domain_annotations(
-        domain_annotations,
-        configuration,
-        domain_key="spatial_domain",
-    )
+
+    io.write_annotations(domain_annotations, configuration, "domain")
     annotated_data.obs["spatial_domain_label"] = (
         annotated_data.obs["spatial_domain"]
         .astype(str)
@@ -373,9 +364,10 @@ def _run_colocalization_stage(
         )
     )
 
-    io.write_spatial_domains(
-        annotated_data,
+    io.write_analysis_artifact(
         configuration,
+        "spatial_domains",
+        annotated_data=annotated_data,
         domain_key="spatial_domain",
     )
 

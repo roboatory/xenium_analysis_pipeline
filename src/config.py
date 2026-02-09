@@ -35,7 +35,7 @@ class PipelineConfig:
     minimum_logarithm_fold_change: float = 0.5
     maximum_adjusted_p_value: float = 0.05
     neighborhood_radius: float = 50.0
-    domain_n_clusters: int = 10
+    domain_n_clusters: int = 8
 
     @classmethod
     def from_dictionary(cls, data: dict[str, Any]) -> PipelineConfig:
@@ -137,7 +137,7 @@ class Config:
         self.plots = PlotsConfig.from_dictionary(configuration["plots"])
 
     def create_directories(self) -> None:
-        """Ensure all output directories exist. Raises ValueError if configuration is not loaded."""
+        """Ensure all output directories exist."""
 
         for path in (
             self.processed_data_directory,

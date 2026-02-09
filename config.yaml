@@ -13,7 +13,7 @@ pipeline:
   minimum_logarithm_fold_change: 0.5
   maximum_adjusted_p_value: 0.05
   neighborhood_radius: 50.0
-  domain_n_clusters: 10
+  domain_n_clusters: 8
 
 plots:
   plot_boundaries: true
