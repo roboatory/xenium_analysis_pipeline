@@ -2,30 +2,77 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
-import dask.config
 
-dask.config.set({"dataframe.query-planning": True})
+import hashlib
+import json
+from pathlib import Path
+from typing import Any
 
-import hashlib  # noqa: E402
-import json  # noqa: E402
-from pathlib import Path  # noqa: E402
-from typing import Any  # noqa: E402
+from anndata import AnnData
+import numpy as np
+import pandas as pd
 
-import pandas as pd  # noqa: E402
-
-from src import analysis, annotation, colocalization, io, plotting, preprocessing  # noqa: E402
-from src.config import Config  # noqa: E402
+from src import analysis, annotation, colocalization, io, plotting, preprocessing
+from src.config import Config
 
 
 @dataclass(frozen=True)
 class StagePaths:
-    processed_path: Path
+    sample_cache_paths: tuple[Path, ...]
     enriched_genes_path: Path
     cluster_labels_path: Path
     annotations_path: Path
     domain_labels_path: Path
     domain_annotations_path: Path
     state_path: Path
+
+
+def _sample_directory_fingerprint(sample_directory: Path) -> dict[str, Any]:
+    """Build a lightweight fingerprint for one raw sample directory."""
+
+    if not sample_directory.exists():
+        return {"exists": False}
+
+    root_stat = sample_directory.stat()
+    children: list[dict[str, Any]] = []
+    try:
+        for child in sorted(sample_directory.iterdir(), key=lambda path: path.name):
+            try:
+                child_stat = child.stat()
+            except OSError:
+                continue
+            children.append(
+                {
+                    "name": child.name,
+                    "is_directory": child.is_dir(),
+                    "size": int(child_stat.st_size),
+                    "mtime_ns": int(child_stat.st_mtime_ns),
+                }
+            )
+    except OSError:
+        children = []
+
+    return {
+        "exists": True,
+        "size": int(root_stat.st_size),
+        "mtime_ns": int(root_stat.st_mtime_ns),
+        "children": children,
+    }
+
+
+def _build_dataset_manifest(configuration: Config) -> list[dict[str, Any]]:
+    """Build a serializable manifest for all configured input samples."""
+
+    manifest: list[dict[str, Any]] = []
+    for sample_id, sample_directory in configuration.iterate_samples():
+        manifest.append(
+            {
+                "sample_id": sample_id,
+                "path": str(sample_directory),
+                "fingerprint": _sample_directory_fingerprint(sample_directory),
+            }
+        )
+    return manifest
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -35,17 +82,17 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--force-process",
         action="store_true",
-        help="Force rerun of preprocessing/clustering and rewrite processed.zarr.",
+        help="Force rerun of preprocessing/clustering and rewrite sample zarr caches.",
     )
     parser.add_argument(
         "--force-annotate",
         action="store_true",
-        help="Force rerun of cluster annotation and rewrite processed.zarr.",
+        help="Force rerun of cluster annotation and rewrite sample zarr caches.",
     )
     parser.add_argument(
         "--force-colocalization",
         action="store_true",
-        help="Force rerun of colocalization analysis and rewrite processed.zarr.",
+        help="Force rerun of colocalization analysis and rewrite sample zarr caches.",
     )
     return parser.parse_args()
 
@@ -67,7 +114,7 @@ def _process_signature(configuration: Config) -> str:
 
     pipeline = configuration.pipeline
     payload = {
-        "raw_data_directory": str(configuration.raw_data_directory),
+        "dataset_manifest": _build_dataset_manifest(configuration),
         "minimum_counts": pipeline.minimum_counts,
         "maximum_counts_quantile": pipeline.maximum_counts_quantile,
         "minimum_cells": pipeline.minimum_cells,
@@ -125,7 +172,11 @@ def _configuration_settings_snapshot(configuration: Config) -> dict[str, Any]:
     pipeline = configuration.pipeline
     plots = configuration.plots
     return {
-        "raw_data_directory": str(configuration.raw_data_directory),
+        "dataset_manifest": _build_dataset_manifest(configuration),
+        "raw_data_directories": [
+            str(raw_data_directory)
+            for raw_data_directory in configuration.raw_data_directories
+        ],
         "output_directory": str(configuration.output_directory),
         "annotation_model": configuration.annotation_model,
         "pipeline": {
@@ -142,8 +193,6 @@ def _configuration_settings_snapshot(configuration: Config) -> dict[str, Any]:
             "domain_n_clusters": pipeline.domain_n_clusters,
         },
         "plots": {
-            "plot_boundaries": plots.plot_boundaries,
-            "plot_transcripts": plots.plot_transcripts,
             "genes_to_plot": list(plots.genes_to_plot),
         },
     }
@@ -162,7 +211,10 @@ def _build_stage_paths(configuration: Config) -> StagePaths:
     """Build canonical input/output paths used for stage decisions."""
 
     return StagePaths(
-        processed_path=configuration.processed_data_directory / "processed.zarr",
+        sample_cache_paths=tuple(
+            configuration.processed_data_directory / "samples" / f"{sample_id}.zarr"
+            for sample_id, _ in configuration.iterate_samples()
+        ),
         enriched_genes_path=configuration.results_directory
         / "cluster_enriched_genes.json",
         cluster_labels_path=configuration.results_directory / "leiden_clusters.csv",
@@ -185,7 +237,7 @@ def _should_run_process_stage(
 
     return (
         arguments.force_process
-        or not paths.processed_path.exists()
+        or any(not sample_path.exists() for sample_path in paths.sample_cache_paths)
         or not paths.enriched_genes_path.exists()
         or not paths.cluster_labels_path.exists()
         or state_cache.get("process_signature") != process_signature
@@ -237,42 +289,55 @@ def _should_run_colocalization_stage(
 def _run_ingestion_preprocessing_stage(configuration: Config) -> None:
     """Run ingestion -> preprocessing -> clustering -> marker ranking stage."""
 
-    spatial_data = io.load_xenium(configuration)
-    annotated_data = spatial_data["table"]
-    if "morphology_focus" in spatial_data:
-        del spatial_data["morphology_focus"]
-        io.write_spatialdata_zarr(spatial_data, annotated_data, configuration)
+    sample_tables: list[AnnData] = []
+    sample_pairs = configuration.iterate_samples()
+    sample_spatial_data: dict[str, Any] = {}
 
-    spatial_data = io.read_spatialdata_zarr(configuration)
-    annotated_data = spatial_data["table"]
+    for sample_id, sample_directory in sample_pairs:
+        spatial_data = io.load_xenium(sample_directory)
+        if "morphology_focus" in spatial_data:
+            del spatial_data["morphology_focus"]
+        io.write_sample_spatialdata_zarr(spatial_data, configuration, sample_id)
+        spatial_data = io.read_sample_spatialdata_zarr(configuration, sample_id)
+        sample_spatial_data[sample_id] = spatial_data
 
-    if configuration.plots.plot_boundaries:
-        plotting.plot_cell_and_nucleus_boundaries(spatial_data, configuration)
-    if configuration.plots.plot_transcripts:
+        annotated_data = spatial_data["table"]
+        annotated_data.obs["sample_id"] = sample_id
+
+        plotting.plot_cell_and_nucleus_boundaries(
+            spatial_data,
+            configuration,
+            sample_id,
+        )
         plotting.plot_transcripts(
             spatial_data,
             configuration,
             list(configuration.plots.genes_to_plot),
             ["blue", "orange"],
+            sample_id,
         )
 
-    annotated_data.layers["counts"] = annotated_data.X.copy()
-
-    plotting.plot_qc_histogram(
-        annotated_data,
-        [
+        annotated_data.layers["counts"] = annotated_data.X.copy()
+        plotting.plot_qc_histogram(
+            annotated_data,
+            [
+                configuration.pipeline.minimum_counts,
+                configuration.pipeline.maximum_counts_quantile,
+            ],
+            ["crimson", "goldenrod"],
+            configuration,
+            sample_id,
+        )
+        preprocessing.filter_cells_and_genes(
+            annotated_data,
             configuration.pipeline.minimum_counts,
             configuration.pipeline.maximum_counts_quantile,
-        ],
-        ["crimson", "goldenrod"],
-        configuration,
-    )
-    preprocessing.filter_cells_and_genes(
-        annotated_data,
-        configuration.pipeline.minimum_counts,
-        configuration.pipeline.maximum_counts_quantile,
-        configuration.pipeline.minimum_cells,
-    )
+            configuration.pipeline.minimum_cells,
+        )
+        sample_tables.append(annotated_data)
+
+    annotated_data = io.pool_tables(sample_tables)
+
     preprocessing.normalize_and_scale(
         annotated_data, configuration.pipeline.n_top_genes
     )
@@ -300,15 +365,40 @@ def _run_ingestion_preprocessing_stage(configuration: Config) -> None:
         enriched_genes=enriched_gene_lists,
     )
 
-    spatial_data["table"] = annotated_data
-    io.write_spatialdata_zarr(spatial_data, annotated_data, configuration)
+    # Pairwise pooled graphs are not needed in per-sample outputs and are expensive
+    # to subset/copy back to each sample table.
+    annotated_data.obsp.clear()
+    annotated_data.varp.clear()
+
+    sample_values = annotated_data.obs["sample_id"].astype(str).to_numpy()
+    for sample_id, spatial_data in sample_spatial_data.items():
+        sample_mask = sample_values == sample_id
+        if bool(sample_mask.all()):
+            sample_table = annotated_data
+        else:
+            sample_indices = np.where(sample_mask)[0]
+            sample_table = annotated_data[sample_indices, :].copy()
+        if "cell_id" in sample_table.obs.columns:
+            sample_table.obs_names = sample_table.obs["cell_id"].astype(str).to_numpy()
+        spatial_data["table"] = sample_table
+
+    for sample_id, spatial_data in sample_spatial_data.items():
+        io.write_sample_spatialdata_zarr(spatial_data, configuration, sample_id)
 
 
 def _run_annotation_stage(configuration: Config) -> None:
     """Run LLM-driven cell-type annotation and persist updated zarr."""
 
-    spatial_data = io.read_spatialdata_zarr(configuration)
-    annotated_data = spatial_data["table"]
+    sample_spatial_data: dict[str, Any] = {}
+    sample_tables: list[AnnData] = []
+    for sample_id, _ in configuration.iterate_samples():
+        spatial_data = io.read_sample_spatialdata_zarr(configuration, sample_id)
+        sample_spatial_data[sample_id] = spatial_data
+        annotated_data = spatial_data["table"]
+        annotated_data.obs["sample_id"] = sample_id
+        sample_tables.append(annotated_data)
+
+    annotated_data = io.pool_tables(sample_tables)
 
     enriched_gene_lists = io.load_enriched_genes(configuration)
     cluster_annotations = annotation.annotate_clusters_with_llm(
@@ -329,15 +419,38 @@ def _run_annotation_stage(configuration: Config) -> None:
         )
     )
 
-    spatial_data["table"] = annotated_data
-    io.write_spatialdata_zarr(spatial_data, annotated_data, configuration)
+    annotated_data.obsp.clear()
+    annotated_data.varp.clear()
+
+    sample_values = annotated_data.obs["sample_id"].astype(str).to_numpy()
+    for sample_id, spatial_data in sample_spatial_data.items():
+        sample_mask = sample_values == sample_id
+        if bool(sample_mask.all()):
+            sample_table = annotated_data
+        else:
+            sample_indices = np.where(sample_mask)[0]
+            sample_table = annotated_data[sample_indices, :].copy()
+        if "cell_id" in sample_table.obs.columns:
+            sample_table.obs_names = sample_table.obs["cell_id"].astype(str).to_numpy()
+        spatial_data["table"] = sample_table
+
+    for sample_id, spatial_data in sample_spatial_data.items():
+        io.write_sample_spatialdata_zarr(spatial_data, configuration, sample_id)
 
 
 def _run_colocalization_stage(configuration: Config) -> None:
     """Run colocalization/neighborhood analysis and persist updated zarr."""
 
-    spatial_data = io.read_spatialdata_zarr(configuration)
-    annotated_data = spatial_data["table"]
+    sample_spatial_data: dict[str, Any] = {}
+    sample_tables: list[AnnData] = []
+    for sample_id, _ in configuration.iterate_samples():
+        spatial_data = io.read_sample_spatialdata_zarr(configuration, sample_id)
+        sample_spatial_data[sample_id] = spatial_data
+        annotated_data = spatial_data["table"]
+        annotated_data.obs["sample_id"] = sample_id
+        sample_tables.append(annotated_data)
+
+    annotated_data = io.pool_tables(sample_tables)
 
     colocalization.compute_neighborhood_composition(
         annotated_data, configuration.pipeline.neighborhood_radius
@@ -371,8 +484,23 @@ def _run_colocalization_stage(configuration: Config) -> None:
         domain_key="spatial_domain",
     )
 
-    spatial_data["table"] = annotated_data
-    io.write_spatialdata_zarr(spatial_data, annotated_data, configuration)
+    annotated_data.obsp.clear()
+    annotated_data.varp.clear()
+
+    sample_values = annotated_data.obs["sample_id"].astype(str).to_numpy()
+    for sample_id, spatial_data in sample_spatial_data.items():
+        sample_mask = sample_values == sample_id
+        if bool(sample_mask.all()):
+            sample_table = annotated_data
+        else:
+            sample_indices = np.where(sample_mask)[0]
+            sample_table = annotated_data[sample_indices, :].copy()
+        if "cell_id" in sample_table.obs.columns:
+            sample_table.obs_names = sample_table.obs["cell_id"].astype(str).to_numpy()
+        spatial_data["table"] = sample_table
+
+    for sample_id, spatial_data in sample_spatial_data.items():
+        io.write_sample_spatialdata_zarr(spatial_data, configuration, sample_id)
 
 
 def main() -> None:
@@ -437,18 +565,39 @@ def main() -> None:
         state_cache["run_configuration_settings"] = run_configuration_settings
         _save_state(paths.state_path, state_cache)
 
-    spatial_data = io.read_spatialdata_zarr(configuration)
-    plotting.plot_umap_leiden(spatial_data, configuration, cluster_key="cell_type")
-    plotting.plot_cluster_overlay(
-        spatial_data,
-        configuration,
-        cluster_key="cell_type",
-    )
-    plotting.plot_cluster_overlay(
-        spatial_data,
-        configuration,
-        cluster_key="spatial_domain_label",
-    )
+    sample_pairs = configuration.iterate_samples()
+    sample_tables: list[AnnData] = []
+    for sample_id, _ in sample_pairs:
+        spatial_data = io.read_sample_spatialdata_zarr(configuration, sample_id)
+        annotated_data = spatial_data["table"]
+        annotated_data.obs["sample_id"] = sample_id
+        sample_tables.append(annotated_data)
+
+    annotated_data = io.pool_tables(sample_tables)
+
+    if "cell_type" in annotated_data.obs.columns:
+        plotting.plot_umap_leiden(
+            annotated_data, configuration, cluster_key="cell_type"
+        )
+
+    if len(sample_pairs) == 1:
+        sample_id, _ = sample_pairs[0]
+        spatial_data = io.read_sample_spatialdata_zarr(configuration, sample_id)
+
+        if "cell_type" in annotated_data.obs.columns:
+            plotting.plot_cluster_overlay(
+                spatial_data,
+                configuration,
+                cluster_key="cell_type",
+            )
+        if "spatial_domain_label" in annotated_data.obs.columns:
+            plotting.plot_cluster_overlay(
+                spatial_data,
+                configuration,
+                cluster_key="spatial_domain_label",
+            )
+    elif len(sample_pairs) > 1:
+        print("Skipping spatial overlays for pooled multi-sample run.")
 
 
 if __name__ == "__main__":

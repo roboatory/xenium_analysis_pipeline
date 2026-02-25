@@ -39,29 +39,39 @@ def annotate_clusters_with_llm(
         )
     )
 
-    response = _ollama_chat(
-        payload={
-            "model": model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": system_instruction,
-                },
-                {
-                    "role": "user",
-                    "content": _build_annotation_prompt(
-                        annotation_evidence_by_cluster,
-                        evidence_type=evidence_type,
-                    ),
-                },
-            ],
-            "format": _annotation_schema(),
-            "stream": False,
-            "temperature": temperature,
-        },
-        host=host,
-        timeout_seconds=timeout_seconds,
-    )
+    try:
+        response = _ollama_chat(
+            payload={
+                "model": model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": system_instruction,
+                    },
+                    {
+                        "role": "user",
+                        "content": _build_annotation_prompt(
+                            annotation_evidence_by_cluster,
+                            evidence_type=evidence_type,
+                        ),
+                    },
+                ],
+                "format": _annotation_schema(),
+                "stream": False,
+                "temperature": temperature,
+            },
+            host=host,
+            timeout_seconds=timeout_seconds,
+        )
+    except RuntimeError:
+        return {
+            str(cluster_id): {
+                "cell_type": f"unknown_cluster_{cluster_id}",
+                "confidence": 0.0,
+                "rationale": "Local LLM service unavailable; using fallback label.",
+            }
+            for cluster_id in sorted(annotation_evidence_by_cluster.keys(), key=str)
+        }
 
     raw_content = response.get("message", {}).get("content", "")
     try:

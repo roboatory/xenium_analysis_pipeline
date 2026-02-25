@@ -19,12 +19,16 @@ import pandas as pd
 def plot_cell_and_nucleus_boundaries(
     spatial_data: SpatialData,
     configuration: Config,
+    suffix: str,
     cell_key: str = "cell_boundaries",
     nucleus_key: str = "nucleus_boundaries",
 ) -> None:
     """Plot cell and nucleus boundaries."""
 
-    out_path = configuration.figures_directory / "xenium_cell_nucleus_boundaries.png"
+    suffix = "" if not suffix else f"_{suffix}"
+    out_path = (
+        configuration.figures_directory / f"xenium_cell_nucleus_boundaries{suffix}.png"
+    )
 
     _show = plt.show
     plt.show = lambda: None
@@ -62,13 +66,16 @@ def plot_transcripts(
     configuration: Config,
     genes: list[str],
     palette: list[str],
+    suffix: str,
     points_key: str = "transcripts",
     max_points: int = 50_000,
 ) -> None:
     """Plot transcripts."""
 
+    suffix = "" if not suffix else f"_{suffix}"
     out_path = (
-        configuration.figures_directory / f"xenium_transcripts_{'_'.join(genes)}.png"
+        configuration.figures_directory
+        / f"xenium_transcripts_{'_'.join(genes)}{suffix}.png"
     )
 
     _show = plt.show
@@ -100,10 +107,14 @@ def plot_qc_histogram(
     cutoffs: list[float],
     cutoff_colors: list[str],
     configuration: Config,
+    suffix: str,
 ) -> None:
     """Plot QC histogram."""
 
-    out_path = configuration.figures_directory / "xenium_transcripts_per_cell.png"
+    suffix = "" if not suffix else f"_{suffix}"
+    out_path = (
+        configuration.figures_directory / f"xenium_transcripts_per_cell{suffix}.png"
+    )
 
     cutoffs = [
         int(cutoffs[0]),
@@ -141,16 +152,14 @@ def plot_qc_histogram(
 
 
 def plot_umap_leiden(
-    spatial_data,
+    annotated_data: AnnData,
     configuration: Config,
     out_path: str | Path | None = None,
-    table_key: str = "table",
     cluster_key: str = "leiden",
 ):
     """Plot UMAP colored by Leiden clusters."""
 
     out_path = configuration.figures_directory / f"umap_{cluster_key}_leiden.png"
-    annotated_data = spatial_data[table_key]
 
     _show = plt.show
     plt.show = lambda: None

@@ -1,5 +1,6 @@
-data_directory: "../data/output-XETG00171__0050702__Region_2__20250606__163112"
-output_directory: "../output/output-XETG00171__0050702__Region_2__20250606__163112"
+data_directories:
+  - "../data/output-XETG00171__0050702__Region_2__20250606__163112"
+output_directory: "../output/pooled"
 annotation_model: "llama3.1:8b"
 
 pipeline:
@@ -16,6 +17,4 @@ pipeline:
   domain_n_clusters: 8
 
 plots:
-  plot_boundaries: true
-  plot_transcripts: true
   genes_to_plot: ["TUBB", "CDH1"]

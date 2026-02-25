@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from anndata import AnnData
+from anndata import AnnData, concat
 import json
+from pathlib import Path
 import shutil
 from typing import Any
 from uuid import uuid4
@@ -12,16 +13,19 @@ from spatialdata_io import xenium
 from .config import Config
 
 
-def load_xenium(configuration: Config) -> SpatialData:
-    """Load Xenium spatial data using the configuration's raw data directory."""
+def load_xenium(raw_data_directory: Path) -> SpatialData:
+    """Load Xenium spatial data from one raw directory."""
 
-    return xenium(configuration.raw_data_directory)
+    return xenium(raw_data_directory)
 
 
-def read_spatialdata_zarr(configuration: Config) -> SpatialData:
-    """Read processed zarr file from the processed data directory."""
+def read_sample_spatialdata_zarr(configuration: Config, sample_id: str) -> SpatialData:
+    """Read one cached sample SpatialData zarr."""
 
-    return read_zarr(configuration.processed_data_directory / "processed.zarr")
+    sample_path = (
+        configuration.processed_data_directory / "samples" / f"{sample_id}.zarr"
+    )
+    return read_zarr(sample_path)
 
 
 def load_enriched_genes(configuration: Config) -> dict[str, list[str]]:
@@ -53,6 +57,10 @@ def write_cluster_labels(
     else:
         cell_ids = annotated_data.obs_names.astype(str)
     cluster_dataframe.insert(0, "cell_id", cell_ids)
+    if "sample_id" in annotated_data.obs.columns:
+        cluster_dataframe.insert(
+            1, "sample_id", annotated_data.obs["sample_id"].astype(str)
+        )
     cluster_dataframe.to_csv(
         configuration.results_directory / f"{cluster_key}_clusters.csv",
         sep=",",
@@ -81,6 +89,10 @@ def _build_obs_label_dataframe(
     else:
         cell_ids = annotated_data.obs_names.astype(str)
     labels_dataframe.insert(0, "cell_id", cell_ids)
+    if "sample_id" in annotated_data.obs.columns:
+        labels_dataframe.insert(
+            1, "sample_id", annotated_data.obs["sample_id"].astype(str)
+        )
     return labels_dataframe
 
 
@@ -100,19 +112,18 @@ def write_annotations(
     _write_json(annotations_path, annotations)
 
 
-def write_spatialdata_zarr(
+def write_sample_spatialdata_zarr(
     spatial_data: SpatialData,
-    annotated_data: AnnData | None,
     configuration: Config,
+    sample_id: str,
 ) -> None:
-    """Write processed spatial data zarr using a simple temp-then-replace flow."""
+    """Write one sample SpatialData cache zarr under processed/samples."""
 
-    target_path = configuration.processed_data_directory / "processed.zarr"
+    sample_directory = configuration.processed_data_directory / "samples"
+    sample_directory.mkdir(parents=True, exist_ok=True)
+    target_path = sample_directory / f"{sample_id}.zarr"
     temporary_path = target_path.parent / f".{target_path.name}.tmp-{uuid4().hex}"
-
-    spatial_data["table"] = annotated_data
     spatial_data.write(temporary_path, overwrite=True)
-
     try:
         if target_path.exists():
             shutil.rmtree(target_path)
@@ -120,6 +131,20 @@ def write_spatialdata_zarr(
     finally:
         if temporary_path.exists():
             shutil.rmtree(temporary_path)
+
+
+def pool_tables(sample_tables: list[AnnData]) -> AnnData:
+    """Concatenate filtered sample tables into a single pooled AnnData."""
+
+    return concat(
+        sample_tables,
+        axis=0,
+        join="outer",
+        merge="same",
+        uns_merge="first",
+        fill_value=0,
+        index_unique="::",
+    )
 
 
 def write_analysis_artifact(

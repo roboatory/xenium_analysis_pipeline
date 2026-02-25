@@ -77,24 +77,17 @@ class PlotsConfig:
     """Configuration for plotting behaviour.
 
     This bundles together:
-    - whether to plot cell boundaries
-    - whether to plot transcripts
-    - the genes to plot
+    - the two genes to plot in transcript overlays
     """
 
-    plot_boundaries: bool = False
-    plot_transcripts: bool = False
-    genes_to_plot: tuple[str, ...] = ()
+    genes_to_plot: tuple[str, str] = ("TUBB", "CDH1")
 
     @classmethod
     def from_dictionary(cls, data: dict[str, Any]) -> PlotsConfig:
         """Create from a raw dictionary (typically loaded from YAML)."""
 
-        return cls(
-            plot_boundaries=data["plot_boundaries"],
-            plot_transcripts=data["plot_transcripts"],
-            genes_to_plot=tuple(data["genes_to_plot"]),
-        )
+        gene_1, gene_2 = data["genes_to_plot"]
+        return cls(genes_to_plot=(str(gene_1), str(gene_2)))
 
 
 @dataclass
@@ -107,7 +100,7 @@ class Config:
     - all tunable parameters loaded from the YAML file
     """
 
-    raw_data_directory: Path | None = None
+    raw_data_directories: tuple[Path, ...] = ()
     output_directory: Path | None = None
     processed_data_directory: Path | None = None
     results_directory: Path | None = None
@@ -122,10 +115,13 @@ class Config:
         with configuration_path.open("r") as f:
             configuration = yaml.safe_load(f)
 
-        raw_data_directory = Path(configuration["data_directory"]).resolve()
+        raw_data_directories = tuple(
+            Path(directory).resolve() for directory in configuration["data_directories"]
+        )
+
         output_directory = Path(configuration["output_directory"]).resolve()
 
-        self.raw_data_directory = raw_data_directory
+        self.raw_data_directories = raw_data_directories
         self.output_directory = output_directory
         self.processed_data_directory = output_directory / "processed"
         self.results_directory = output_directory / "analysis"
@@ -135,6 +131,14 @@ class Config:
         )
         self.pipeline = PipelineConfig.from_dictionary(configuration["pipeline"])
         self.plots = PlotsConfig.from_dictionary(configuration["plots"])
+
+    def iterate_samples(self) -> tuple[tuple[str, Path], ...]:
+        """Return (sample_id, directory_path) tuples in configured order."""
+
+        return tuple(
+            (raw_data_directory.name, raw_data_directory)
+            for raw_data_directory in self.raw_data_directories
+        )
 
     def create_directories(self) -> None:
         """Ensure all output directories exist."""
