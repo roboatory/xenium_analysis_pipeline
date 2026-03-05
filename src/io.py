@@ -2,29 +2,46 @@ from __future__ import annotations
 
 from anndata import AnnData
 import json
+import pandas as pd
 import shutil
-from typing import Any
 from uuid import uuid4
 
 from spatialdata import SpatialData, read_zarr
-from spatialdata_io import xenium
 
-from .config import Config
-
-
-def load_xenium(configuration: Config) -> SpatialData:
-    """Load Xenium spatial data using the configuration's raw data directory."""
-
-    return xenium(configuration.raw_data_directory)
+from .config import Configuration
 
 
-def read_spatialdata_zarr(configuration: Config) -> SpatialData:
+def read_spatialdata_zarr(
+    configuration: Configuration,
+) -> SpatialData:
     """Read processed zarr file from the processed data directory."""
 
     return read_zarr(configuration.processed_data_directory / "processed.zarr")
 
 
-def load_enriched_genes(configuration: Config) -> dict[str, list[str]]:
+def write_spatialdata_zarr(
+    configuration: Configuration,
+    spatial_data: SpatialData,
+) -> None:
+    """Write processed spatial zarr using a simple temp-then-replace flow."""
+
+    target_path = configuration.processed_data_directory / "processed.zarr"
+    temporary_path = target_path.parent / f".{target_path.name}.tmp-{uuid4().hex}"
+
+    spatial_data.write(temporary_path, overwrite=True)
+
+    try:
+        if target_path.exists():
+            shutil.rmtree(target_path)
+        temporary_path.rename(target_path)
+    finally:
+        if temporary_path.exists():
+            shutil.rmtree(temporary_path)
+
+
+def read_enriched_genes(
+    configuration: Configuration,
+) -> dict[str, list[str]]:
     """Load enriched genes per cluster from the analysis directory JSON."""
 
     enriched_genes_path = (
@@ -39,113 +56,66 @@ def load_enriched_genes(configuration: Config) -> dict[str, list[str]]:
     }
 
 
-def write_cluster_labels(
-    annotated_data: AnnData,
-    configuration: Config,
-    cluster_key: str = "leiden",
+def write_enriched_genes(
+    configuration: Configuration,
+    enriched_genes: dict[str, list[str]],
 ) -> None:
-    """Write the cluster labels to a CSV file."""
+    """Write enriched genes JSON artifact."""
 
-    cluster_dataframe = annotated_data.obs[[cluster_key]].copy()
-    cluster_dataframe = cluster_dataframe.rename(columns={cluster_key: "group"})
-    if "cell_id" in annotated_data.obs.columns:
-        cell_ids = annotated_data.obs["cell_id"].astype(str)
-    else:
-        cell_ids = annotated_data.obs_names.astype(str)
-    cluster_dataframe.insert(0, "cell_id", cell_ids)
-    cluster_dataframe.to_csv(
-        configuration.results_directory / f"{cluster_key}_clusters.csv",
-        sep=",",
-        index=False,
+    enriched_genes_path = (
+        configuration.results_directory / "cluster_enriched_genes.json"
     )
-
-
-def _write_json(path, payload: Any) -> None:
-    """Write JSON payload to disk."""
-
-    with path.open("w") as file_handle:
-        json.dump(payload, file_handle, indent=2)
-
-
-def _build_obs_label_dataframe(
-    annotated_data: AnnData,
-    value_key: str,
-    output_column: str,
-):
-    """Build a labels dataframe with canonical `cell_id` first column."""
-
-    labels_dataframe = annotated_data.obs[[value_key]].copy()
-    labels_dataframe = labels_dataframe.rename(columns={value_key: output_column})
-    if "cell_id" in annotated_data.obs.columns:
-        cell_ids = annotated_data.obs["cell_id"].astype(str)
-    else:
-        cell_ids = annotated_data.obs_names.astype(str)
-    labels_dataframe.insert(0, "cell_id", cell_ids)
-    return labels_dataframe
+    with enriched_genes_path.open("w") as file_handle:
+        json.dump(enriched_genes, file_handle, indent=2)
 
 
 def write_annotations(
+    configuration: Configuration,
     annotations: dict[str, dict[str, str | float]],
-    configuration: Config,
     target: str,
-    domain_key: str = "spatial_domain",
 ) -> None:
     """Write cluster/domain annotation JSON artifacts."""
 
     annotation_paths = {
         "cluster": configuration.results_directory / "cluster_annotations.json",
-        "domain": configuration.results_directory / f"{domain_key}_annotations.json",
+        "domain": configuration.results_directory / "spatial_domain_annotations.json",
     }
     annotations_path = annotation_paths[target]
-    _write_json(annotations_path, annotations)
+    with annotations_path.open("w") as file_handle:
+        json.dump(annotations, file_handle, indent=2)
 
 
-def write_spatialdata_zarr(
-    spatial_data: SpatialData,
-    annotated_data: AnnData | None,
-    configuration: Config,
-) -> None:
-    """Write processed spatial data zarr using a simple temp-then-replace flow."""
-
-    target_path = configuration.processed_data_directory / "processed.zarr"
-    temporary_path = target_path.parent / f".{target_path.name}.tmp-{uuid4().hex}"
-
-    spatial_data["table"] = annotated_data
-    spatial_data.write(temporary_path, overwrite=True)
-
-    try:
-        if target_path.exists():
-            shutil.rmtree(target_path)
-        temporary_path.rename(target_path)
-    finally:
-        if temporary_path.exists():
-            shutil.rmtree(temporary_path)
-
-
-def write_analysis_artifact(
-    configuration: Config,
+def write_labels(
+    configuration: Configuration,
+    annotated_data: AnnData,
     target: str,
-    enriched_genes: dict[str, list[str]] | None = None,
-    annotated_data: AnnData | None = None,
-    domain_key: str = "spatial_domain",
 ) -> None:
-    """Write enriched genes JSON or spatial domain labels CSV."""
+    """Write cluster/domain label CSV artifacts."""
 
-    if target == "enriched_genes":
-        _write_json(
-            configuration.results_directory / "cluster_enriched_genes.json",
-            enriched_genes,
-        )
-        return
+    if target == "cluster":
+        label_column = "leiden"
+        output_path = configuration.results_directory / "leiden_clusters.csv"
+    elif target == "domain":
+        label_column = "spatial_domain"
+        output_path = configuration.results_directory / "spatial_domain_labels.csv"
 
-    if target == "spatial_domains":
-        domain_dataframe = _build_obs_label_dataframe(
-            annotated_data,
-            value_key=domain_key,
-            output_column="domain",
-        )
-        domain_dataframe.to_csv(
-            configuration.results_directory / f"{domain_key}_labels.csv",
-            index=False,
-        )
-        return
+    dataframe = annotated_data.obs[[label_column]].rename(
+        columns={label_column: "group"}
+    )
+    dataframe.insert(0, "cell_id", annotated_data.obs["cell_id"])
+    dataframe.to_csv(output_path, index=False)
+
+
+def write_colocalization_matrices(
+    configuration: Configuration,
+    counts: pd.DataFrame,
+    proportions: pd.DataFrame,
+) -> None:
+    """Write cell-type contact matrix artifacts."""
+
+    counts_path = configuration.results_directory / "cell_type_contact_counts.csv"
+    proportions_path = (
+        configuration.results_directory / "cell_type_contact_row_proportions.csv"
+    )
+    counts.to_csv(counts_path)
+    proportions.to_csv(proportions_path)

@@ -7,7 +7,7 @@ from urllib.request import Request, urlopen
 
 
 def annotate_clusters_with_llm(
-    annotation_evidence_by_cluster: dict[str, list[str]],
+    annotation_evidence_by_cluster: dict[str, list[object]],
     *,
     model: str = "llama3.1:8b",
     evidence_type: str = "marker_genes",
@@ -82,7 +82,7 @@ def annotate_clusters_with_llm(
 
 
 def _build_annotation_prompt(
-    annotation_evidence_by_cluster: dict[str, list[str]],
+    annotation_evidence_by_cluster: dict[str, list[object]],
     *,
     evidence_type: str = "marker_genes",
 ) -> str:
@@ -134,7 +134,20 @@ def _build_annotation_prompt(
     for cluster_id, evidence_items in sorted(
         annotation_evidence_by_cluster.items(), key=lambda item: item[0]
     ):
-        lines.append(f"- {cluster_id}: {', '.join(evidence_items)}")
+        formatted_items: list[str] = []
+        for item in evidence_items:
+            if isinstance(item, (tuple, list)) and len(item) >= 2:
+                label = str(item[0])
+                try:
+                    value = float(item[1])
+                except (TypeError, ValueError):
+                    formatted_items.append(str(label))
+                    continue
+                percent = f"{value * 100:.1f}%"
+                formatted_items.append(f"{label} ({percent})")
+            else:
+                formatted_items.append(str(item))
+        lines.append(f"- {cluster_id}: {', '.join(formatted_items)}")
     return "\n".join(lines)
 
 
@@ -170,7 +183,7 @@ def _ollama_chat(
 
 def _parse_and_normalize(
     raw_content: str,
-    annotation_evidence_by_cluster: dict[str, list[str]],
+    annotation_evidence_by_cluster: dict[str, list[object]],
     *,
     evidence_type: str = "marker_genes",
 ) -> dict[str, dict[str, Any]]:
@@ -297,7 +310,10 @@ def _parse_and_normalize(
     return normalized
 
 
-def _normalize_microenvironment_label(label: str, evidence_items: list[str]) -> str:
+def _normalize_microenvironment_label(
+    label: str,
+    evidence_items: list[object],
+) -> str:
     """Convert trivial neighborhood labels into microenvironment-style labels."""
 
     clean_label = label.strip()
@@ -308,7 +324,14 @@ def _normalize_microenvironment_label(label: str, evidence_items: list[str]) -> 
     if normalized_label in {"unknown", "unassigned"}:
         return "unknown_microenvironment"
 
-    evidence_tokens = {item.strip().lower() for item in evidence_items if item.strip()}
+    evidence_tokens = set()
+    for item in evidence_items:
+        if isinstance(item, (tuple, list)) and item:
+            token = str(item[0]).strip().lower()
+        else:
+            token = str(item).strip().lower()
+        if token:
+            evidence_tokens.add(token)
     if normalized_label in evidence_tokens:
         return f"{clean_label}-rich microenvironment"
 

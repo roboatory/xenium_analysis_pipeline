@@ -3,67 +3,72 @@ from __future__ import annotations
 from anndata import AnnData
 import numpy as np
 import pandas as pd
-from sklearn.cluster import KMeans
+from scipy import sparse
 import squidpy as sq
 
 
-def compute_neighborhood_composition(
+def compute_observed_contact_matrices(
     annotated_data: AnnData,
     radius: float,
-    cluster_key: str = "cell_type",
-    spatial_key: str = "spatial",
-    composition_key: str = "neighborhood_composition",
-) -> None:
-    """Compute per-cell neighborhood cell-type proportions within a spatial radius."""
+    label_key: str = "cell_type",
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Compute observed contact count and row-normalized contact matrices."""
 
-    if (
-        cluster_key == "cell_type"
-        and cluster_key not in annotated_data.obs
-        and "leiden" in annotated_data.obs
-    ):
-        cluster_key = "leiden"
+    if label_key not in annotated_data.obs:
+        msg = f"Label column '{label_key}' not found in annotated_data.obs."
+        raise ValueError(msg)
 
-    cluster_values = annotated_data.obs[cluster_key].astype("category")
-    cluster_categories = cluster_values.cat.categories.astype(str)
-    cluster_codes = cluster_values.cat.codes.to_numpy()
-    valid_mask = cluster_codes >= 0
+    labels = annotated_data.obs[label_key]
+    valid_mask = labels.notna().to_numpy()
+    valid_labels = labels[valid_mask].astype("category")
+    categories = valid_labels.cat.categories.astype(str)
 
     sq.gr.spatial_neighbors(
         annotated_data,
-        spatial_key=spatial_key,
-        coord_type="generic",
         radius=radius,
-        delaunay=True,
+        coord_type="generic",
+        delaunay=False,
+        key_added="colocalization",
+        set_diag=False,
     )
 
-    connectivities = annotated_data.obsp["spatial_connectivities"].tocsr(copy=True)
+    connectivities = annotated_data.obsp["colocalization_connectivities"].tocsr().copy()
     connectivities.setdiag(0)
     connectivities.eliminate_zeros()
+    undirected_edges = sparse.triu(connectivities, k=1, format="coo")
 
-    one_hot = np.zeros(
-        (annotated_data.n_obs, len(cluster_categories)), dtype=np.float32
+    category_codes = np.full(annotated_data.n_obs, -1, dtype=np.int64)
+    category_codes[valid_mask] = valid_labels.cat.codes.to_numpy()
+
+    row_codes = category_codes[undirected_edges.row]
+    col_codes = category_codes[undirected_edges.col]
+    edge_mask = (row_codes >= 0) & (col_codes >= 0)
+    row_codes = row_codes[edge_mask]
+    col_codes = col_codes[edge_mask]
+
+    n_categories = len(categories)
+    counts = np.zeros((n_categories, n_categories), dtype=np.int64)
+    np.add.at(counts, (row_codes, col_codes), 1)
+    asymmetric_mask = row_codes != col_codes
+    np.add.at(
+        counts,
+        (col_codes[asymmetric_mask], row_codes[asymmetric_mask]),
+        1,
     )
-    valid_rows = np.flatnonzero(valid_mask)
-    one_hot[valid_rows, cluster_codes[valid_rows]] = 1.0
 
-    neighbor_counts = np.asarray(connectivities @ one_hot, dtype=np.float32)
-    totals = neighbor_counts.sum(axis=1, keepdims=True, dtype=np.float32)
-    composition = np.zeros_like(neighbor_counts, dtype=np.float32)
-    np.divide(neighbor_counts, totals, out=composition, where=totals > 0)
+    count_matrix = pd.DataFrame(counts, index=categories, columns=categories)
 
-    annotated_data.obsm[composition_key] = composition
+    row_totals = counts.sum(axis=1, keepdims=True)
+    proportion_matrix = np.divide(
+        counts.astype(np.float64),
+        row_totals,
+        out=np.zeros_like(counts, dtype=np.float64),
+        where=row_totals > 0,
+    )
+    row_proportion_matrix = pd.DataFrame(
+        proportion_matrix,
+        index=categories,
+        columns=categories,
+    )
 
-
-def assign_spatial_domains(
-    annotated_data: AnnData,
-    n_clusters: int = 10,
-    domain_key: str = "spatial_domain",
-    composition_key: str = "neighborhood_composition",
-) -> None:
-    """Cluster neighborhood composition vectors into spatial domain labels."""
-
-    composition_matrix = np.asarray(annotated_data.obsm[composition_key])
-    kmeans = KMeans(n_clusters=n_clusters, random_state=0)
-    labels = kmeans.fit_predict(composition_matrix).astype(str)
-
-    annotated_data.obs[domain_key] = pd.Categorical(labels)
+    return count_matrix, row_proportion_matrix

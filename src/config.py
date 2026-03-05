@@ -8,97 +8,77 @@ import yaml
 
 
 @dataclass(frozen=True)
-class PipelineConfig:
+class PipelineConfiguration:
     """Configuration for analysis pipeline parameters.
 
     This bundles together:
     - the minimum number of counts per cell
     - the maximum counts quantile
     - the minimum number of cells per gene
-    - the number of top genes to use for PCA
-    - the number of components to use for PCA
-    - the Leiden resolution parameter
+    - the number of principal components for PCA
+    - the neighborhood radius for spatial domains
+    - the radius for cell-type contact colocalization
+    - the number of spatial domains to infer with k-means
     - the number of top genes to use for enrichment analysis
     - the minimum log fold change for enrichment analysis
     - the maximum adjusted p-value for enrichment analysis
-    - the neighborhood radius for spatial domains
-    - the number of spatial domains to infer with k-means
     """
 
-    minimum_counts: int = 200
-    maximum_counts_quantile: float = 0.99
-    minimum_cells: int = 100
-    n_top_genes: int = 2000
-    n_components: int = 30
-    leiden_resolution: float = 0.5
-    rank_top_n: int = 30
-    minimum_logarithm_fold_change: float = 0.5
-    maximum_adjusted_p_value: float = 0.05
-    neighborhood_radius: float = 50.0
-    domain_n_clusters: int = 8
+    minimum_counts: int
+    maximum_counts_quantile: float
+    minimum_cells: int
+    pca_n_components: int
+    neighborhood_radius: float
+    colocalization_radius: float
+    domain_n_clusters: int
+    rank_top_n: int
+    minimum_logarithm_fold_change: float
+    maximum_adjusted_p_value: float
 
     @classmethod
-    def from_dictionary(cls, data: dict[str, Any]) -> PipelineConfig:
+    def from_dictionary(
+        cls: type[PipelineConfiguration],
+        data: dict[str, Any],
+    ) -> PipelineConfiguration:
         """Create from a raw dictionary (typically loaded from YAML)."""
 
-        defaults = cls()
         return cls(
-            minimum_counts=int(data.get("minimum_counts", defaults.minimum_counts)),
-            maximum_counts_quantile=float(
-                data.get("maximum_counts_quantile", defaults.maximum_counts_quantile)
-            ),
-            minimum_cells=int(data.get("minimum_cells", defaults.minimum_cells)),
-            n_top_genes=int(data.get("n_top_genes", defaults.n_top_genes)),
-            n_components=int(data.get("n_components", defaults.n_components)),
-            leiden_resolution=float(
-                data.get("leiden_resolution", defaults.leiden_resolution)
-            ),
-            rank_top_n=int(data.get("rank_top_n", defaults.rank_top_n)),
-            minimum_logarithm_fold_change=float(
-                data.get(
-                    "minimum_logarithm_fold_change",
-                    defaults.minimum_logarithm_fold_change,
-                )
-            ),
-            maximum_adjusted_p_value=float(
-                data.get("maximum_adjusted_p_value", defaults.maximum_adjusted_p_value)
-            ),
-            neighborhood_radius=float(
-                data.get("neighborhood_radius", defaults.neighborhood_radius)
-            ),
-            domain_n_clusters=int(
-                data.get("domain_n_clusters", defaults.domain_n_clusters)
-            ),
+            minimum_counts=int(data["minimum_counts"]),
+            maximum_counts_quantile=float(data["maximum_counts_quantile"]),
+            minimum_cells=int(data["minimum_cells"]),
+            pca_n_components=int(data["pca_n_components"]),
+            neighborhood_radius=float(data["neighborhood_radius"]),
+            colocalization_radius=float(data.get("colocalization_radius", 20.0)),
+            domain_n_clusters=int(data["domain_n_clusters"]),
+            rank_top_n=int(data["rank_top_n"]),
+            minimum_logarithm_fold_change=float(data["minimum_logarithm_fold_change"]),
+            maximum_adjusted_p_value=float(data["maximum_adjusted_p_value"]),
         )
 
 
 @dataclass(frozen=True)
-class PlotsConfig:
+class PlotsConfiguration:
     """Configuration for plotting behaviour.
 
-    This bundles together:
-    - whether to plot cell boundaries
-    - whether to plot transcripts
-    - the genes to plot
+    This bundles together the genes to plot for transcript figures.
     """
 
-    plot_boundaries: bool = False
-    plot_transcripts: bool = False
     genes_to_plot: tuple[str, ...] = ()
 
     @classmethod
-    def from_dictionary(cls, data: dict[str, Any]) -> PlotsConfig:
+    def from_dictionary(
+        cls: type[PlotsConfiguration],
+        data: dict[str, Any],
+    ) -> PlotsConfiguration:
         """Create from a raw dictionary (typically loaded from YAML)."""
 
         return cls(
-            plot_boundaries=data["plot_boundaries"],
-            plot_transcripts=data["plot_transcripts"],
             genes_to_plot=tuple(data["genes_to_plot"]),
         )
 
 
 @dataclass
-class Config:
+class Configuration:
     """Top-level configuration object used across the project.
 
     This bundles together:
@@ -113,10 +93,13 @@ class Config:
     results_directory: Path | None = None
     figures_directory: Path | None = None
     annotation_model: str = "llama3.1:8b"
-    pipeline: PipelineConfig | None = None
-    plots: PlotsConfig | None = None
+    pipeline: PipelineConfiguration | None = None
+    plots: PlotsConfiguration | None = None
 
-    def load_from_yaml(self, configuration_path: Path) -> None:
+    def load_from_yaml(
+        self: type[Configuration],
+        configuration_path: Path,
+    ) -> None:
         """Load configuration from a YAML file and populate this instance."""
 
         with configuration_path.open("r") as f:
@@ -133,10 +116,12 @@ class Config:
         self.annotation_model = str(
             configuration.get("annotation_model", self.annotation_model)
         )
-        self.pipeline = PipelineConfig.from_dictionary(configuration["pipeline"])
-        self.plots = PlotsConfig.from_dictionary(configuration["plots"])
+        self.pipeline = PipelineConfiguration.from_dictionary(configuration["pipeline"])
+        self.plots = PlotsConfiguration.from_dictionary(configuration["plots"])
 
-    def create_directories(self) -> None:
+    def create_directories(
+        self: type[Configuration],
+    ) -> None:
         """Ensure all output directories exist."""
 
         for path in (

@@ -11,3 +11,6 @@ wheels/
 
 # Apple files
 *.DS_Store
+
+# Project files
+plans/

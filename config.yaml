@@ -6,16 +6,13 @@ pipeline:
   minimum_counts: 200
   maximum_counts_quantile: 0.99
   minimum_cells: 100
-  n_top_genes: 2000
-  n_components: 30
-  leiden_resolution: 0.5
+  pca_n_components: 30
+  neighborhood_radius: 50.0
+  colocalization_radius: 20.0
+  domain_n_clusters: 8
   rank_top_n: 30
   minimum_logarithm_fold_change: 0.5
   maximum_adjusted_p_value: 0.05
-  neighborhood_radius: 50.0
-  domain_n_clusters: 8
 
 plots:
-  plot_boundaries: true
-  plot_transcripts: true
   genes_to_plot: ["TUBB", "CDH1"]

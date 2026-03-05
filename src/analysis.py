@@ -7,20 +7,22 @@ import scanpy as sc
 
 def run_clustering(
     annotated_data: AnnData,
-    n_components: int,
-    leiden_resolution: float,
-    metric: str = "cosine",
-    leiden_flavor: str = "igraph",
+    pca_n_components: int,
 ) -> None:
     """Run clustering on the annotated data."""
 
-    sc.pp.pca(annotated_data, n_components)
-    sc.pp.neighbors(annotated_data, metric=metric)
-    sc.tl.leiden(annotated_data, flavor=leiden_flavor, resolution=leiden_resolution)
-    sc.tl.dendrogram(annotated_data, groupby="leiden")
+    sc.pp.pca(annotated_data, pca_n_components)
+    sc.pp.neighbors(annotated_data, metric="cosine")
+    sc.tl.leiden(
+        annotated_data,
+        0.5,
+        flavor="igraph",
+    )
 
 
-def run_umap(annotated_data: AnnData) -> None:
+def run_umap(
+    annotated_data: AnnData,
+) -> None:
     """Run UMAP on the annotated data."""
 
     sc.tl.umap(annotated_data)
@@ -28,17 +30,19 @@ def run_umap(annotated_data: AnnData) -> None:
 
 def rank_genes(
     annotated_data: AnnData,
-    groupby: str = "leiden",
-    layer: str = "log_normalized",
 ) -> None:
     """Rank genes on the annotated data."""
 
-    sc.tl.rank_genes_groups(annotated_data, groupby=groupby, layer=layer)
+    sc.tl.rank_genes_groups(
+        annotated_data,
+        "leiden",
+        layer="log_normalized",
+        pts=True,
+    )
 
 
 def compute_enriched_genes(
     annotated_data: AnnData,
-    clusters: list[str],
     top_n: int,
     minimum_logarithm_fold_change: float,
     maximum_adjusted_p_value: float,
@@ -47,9 +51,10 @@ def compute_enriched_genes(
 
     gene_lists_by_cluster: dict[str, list[str]] = {}
 
-    for cluster in clusters:
+    for cluster in pd.unique(annotated_data.obs["leiden"]):
         cluster_dataframe = sc.get.rank_genes_groups_df(
-            annotated_data, group=cluster
+            annotated_data,
+            group=cluster,
         ).dropna(subset=["names"])
 
         cluster_dataframe = cluster_dataframe[
@@ -68,29 +73,23 @@ def compute_enriched_genes(
 
 def build_domain_signatures(
     annotated_data: AnnData,
-    domain_key: str = "spatial_domain",
-    composition_key: str = "neighborhood_composition",
-    cluster_key: str = "cell_type",
-    top_n: int = 6,
-) -> dict[str, list[str]]:
+) -> dict[str, list[tuple[str, float]]]:
     """Summarize each spatial domain by dominant neighborhood components."""
 
-    component_labels = [
-        str(label)
-        for label in annotated_data.obs[cluster_key].astype("category").cat.categories
-    ]
-    composition_matrix = annotated_data.obsm[composition_key]
-    composition_dataframe = pd.DataFrame(
-        composition_matrix,
+    component_labels = annotated_data.obs["cell_type"].astype(str).unique().tolist()
+    composition = pd.DataFrame(
+        annotated_data.obsm["neighborhood_composition"],
         index=annotated_data.obs_names,
         columns=component_labels,
     )
-    domain_values = annotated_data.obs[domain_key].astype(str)
-    domain_means = composition_dataframe.groupby(domain_values, sort=True).mean()
+    domain_means = composition.groupby(
+        annotated_data.obs["spatial_domain"].astype(str)
+    ).mean()
 
-    signatures: dict[str, list[str]] = {}
-    for domain_id, row in domain_means.iterrows():
-        top_components = row.sort_values(ascending=False).head(top_n).index.tolist()
-        signatures[str(domain_id)] = [str(component) for component in top_components]
-
-    return signatures
+    return {
+        str(domain_id): [
+            (str(cell_type), float(frequency))
+            for cell_type, frequency in row.sort_values(ascending=False).items()
+        ]
+        for domain_id, row in domain_means.iterrows()
+    }
