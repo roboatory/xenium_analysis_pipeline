@@ -81,7 +81,7 @@ class PlotsConfiguration:
         """Create from a raw dictionary (typically loaded from YAML)."""
 
         return cls(
-            genes_to_plot=tuple(data["genes_to_plot"]),
+            genes_to_plot=tuple(sorted(data["genes_to_plot"])),
         )
 
 
