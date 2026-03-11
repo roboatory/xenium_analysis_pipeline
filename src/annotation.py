@@ -8,17 +8,13 @@ from urllib.request import Request, urlopen
 
 def annotate_clusters_with_llm(
     annotation_evidence_by_cluster: dict[str, list[object]],
-    *,
-    model: str = "llama3.1:8b",
-    evidence_type: str = "marker_genes",
+    model: str,
+    evidence_type: str,
     host: str = "http://localhost:11434",
     temperature: float = 0.0,
     timeout_seconds: int = 120,
 ) -> dict[str, dict[str, Any]]:
     """Annotate clusters using a local Ollama-compatible LLM."""
-
-    if not annotation_evidence_by_cluster:
-        return {}
 
     is_marker_mode = evidence_type == "marker_genes"
     evidence_label = (
@@ -40,7 +36,7 @@ def annotate_clusters_with_llm(
     )
 
     response = _ollama_chat(
-        payload={
+        {
             "model": model,
             "messages": [
                 {
@@ -51,7 +47,7 @@ def annotate_clusters_with_llm(
                     "role": "user",
                     "content": _build_annotation_prompt(
                         annotation_evidence_by_cluster,
-                        evidence_type=evidence_type,
+                        evidence_type,
                     ),
                 },
             ],
@@ -59,8 +55,8 @@ def annotate_clusters_with_llm(
             "stream": False,
             "temperature": temperature,
         },
-        host=host,
-        timeout_seconds=timeout_seconds,
+        host,
+        timeout_seconds,
     )
 
     raw_content = response.get("message", {}).get("content", "")
@@ -68,7 +64,6 @@ def annotate_clusters_with_llm(
         return _parse_and_normalize(
             raw_content,
             annotation_evidence_by_cluster,
-            evidence_type=evidence_type,
         )
     except (RuntimeError, ValueError):
         return {
@@ -83,8 +78,7 @@ def annotate_clusters_with_llm(
 
 def _build_annotation_prompt(
     annotation_evidence_by_cluster: dict[str, list[object]],
-    *,
-    evidence_type: str = "marker_genes",
+    evidence_type: str,
 ) -> str:
     """Build prompt with schema and per-cluster annotation evidence."""
 
@@ -153,7 +147,6 @@ def _build_annotation_prompt(
 
 def _ollama_chat(
     payload: dict[str, Any],
-    *,
     host: str,
     timeout_seconds: int,
 ) -> dict[str, Any]:
@@ -170,29 +163,27 @@ def _ollama_chat(
     try:
         with urlopen(request, timeout=timeout_seconds) as response:
             body = response.read().decode("utf-8")
-    except (HTTPError, URLError) as exc:
-        msg = f"Failed to reach local LLM at {url}: {exc}"
-        raise RuntimeError(msg) from exc
+    except (HTTPError, URLError) as error:
+        message = f"Failed to reach local LLM at {url}: {error}"
+        raise RuntimeError(message) from error
 
     try:
         return json.loads(body)
-    except json.JSONDecodeError as exc:
-        msg = "Local LLM returned invalid JSON."
-        raise RuntimeError(msg) from exc
+    except json.JSONDecodeError as error:
+        message = "Local LLM returned invalid JSON."
+        raise RuntimeError(message) from error
 
 
 def _parse_and_normalize(
     raw_content: str,
     annotation_evidence_by_cluster: dict[str, list[object]],
-    *,
-    evidence_type: str = "marker_genes",
 ) -> dict[str, dict[str, Any]]:
     """Parse model output, normalize fields, and fill missing clusters."""
 
     content = raw_content.strip()
     if not content:
-        msg = "Local LLM returned empty content."
-        raise ValueError(msg)
+        message = "Local LLM returned empty content."
+        raise ValueError(message)
 
     if content.startswith("```"):
         lines = content.splitlines()
@@ -222,8 +213,8 @@ def _parse_and_normalize(
         except json.JSONDecodeError:
             continue
     if parsed is None:
-        msg = "Could not parse JSON from LLM response."
-        raise RuntimeError(msg)
+        message = "Could not parse JSON from LLM response."
+        raise RuntimeError(message)
 
     if isinstance(parsed, dict):
         for key in ("annotations", "clusters", "results", "data"):
@@ -252,11 +243,11 @@ def _parse_and_normalize(
                 raw_items.append((str(cluster_id), value))
 
     if not raw_items:
-        msg = (
+        message = (
             "Annotation response must be a dictionary, or a list of objects with "
             "'cluster_id'/'cluster'/'id'/'group'."
         )
-        raise ValueError(msg)
+        raise ValueError(message)
 
     normalized: dict[str, dict[str, Any]] = {}
     for cluster_id, value in raw_items:
@@ -271,11 +262,6 @@ def _parse_and_normalize(
             or value.get("type")
             or "unknown"
         ).strip()
-        if evidence_type == "neighborhood_cell_types":
-            cell_type = _normalize_microenvironment_label(
-                cell_type,
-                annotation_evidence_by_cluster.get(str(cluster_id), []),
-            )
         rationale = str(
             value.get("rationale")
             or value.get("reason")
@@ -308,46 +294,6 @@ def _parse_and_normalize(
             }
 
     return normalized
-
-
-def _normalize_microenvironment_label(
-    label: str,
-    evidence_items: list[object],
-) -> str:
-    """Convert trivial neighborhood labels into microenvironment-style labels."""
-
-    clean_label = label.strip()
-    if not clean_label:
-        return "unknown_microenvironment"
-
-    normalized_label = clean_label.replace("_", " ").strip().lower()
-    if normalized_label in {"unknown", "unassigned"}:
-        return "unknown_microenvironment"
-
-    evidence_tokens = set()
-    for item in evidence_items:
-        if isinstance(item, (tuple, list)) and item:
-            token = str(item[0]).strip().lower()
-        else:
-            token = str(item).strip().lower()
-        if token:
-            evidence_tokens.add(token)
-    if normalized_label in evidence_tokens:
-        return f"{clean_label}-rich microenvironment"
-
-    microenvironment_tokens = {
-        "microenvironment",
-        "niche",
-        "interface",
-        "zone",
-        "region",
-        "transition",
-        "neighborhood",
-        "compartment",
-    }
-    if any(token in normalized_label for token in microenvironment_tokens):
-        return clean_label
-    return f"{clean_label} microenvironment"
 
 
 def _annotation_schema() -> dict[str, Any]:

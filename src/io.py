@@ -119,3 +119,59 @@ def write_colocalization_matrices(
     )
     counts.to_csv(counts_path)
     proportions.to_csv(proportions_path)
+
+
+def write_colocalization_permutation_matrices(
+    configuration: Configuration,
+    expected_counts: pd.DataFrame,
+    fold_enrichment: pd.DataFrame,
+    log2_fold_enrichment: pd.DataFrame,
+    empirical_p_values: pd.DataFrame,
+    fdr: pd.DataFrame,
+    significant_mask: pd.DataFrame,
+) -> None:
+    """Write colocalization permutation and significance matrices."""
+
+    matrix_paths = {
+        "expected_counts": configuration.results_directory
+        / "cell_type_contact_expected_counts.csv",
+        "fold_enrichment": configuration.results_directory
+        / "cell_type_contact_fold_enrichment.csv",
+        "log2_fold_enrichment": configuration.results_directory
+        / "cell_type_contact_log2_fold_enrichment.csv",
+        "empirical_p_values": configuration.results_directory
+        / "cell_type_contact_empirical_p_values.csv",
+        "fdr": configuration.results_directory / "cell_type_contact_fdr.csv",
+        "significant_mask": configuration.results_directory
+        / "cell_type_contact_significant_mask.csv",
+    }
+    expected_counts.to_csv(matrix_paths["expected_counts"])
+    fold_enrichment.to_csv(matrix_paths["fold_enrichment"])
+    log2_fold_enrichment.to_csv(matrix_paths["log2_fold_enrichment"])
+    empirical_p_values.to_csv(matrix_paths["empirical_p_values"])
+    fdr.to_csv(matrix_paths["fdr"])
+    significant_mask.astype(int).to_csv(matrix_paths["significant_mask"])
+
+
+def write_colocalization_significance_tables(
+    configuration: Configuration,
+    pair_statistics_all: pd.DataFrame,
+    pair_statistics_significant: pd.DataFrame,
+    excluded_low_count_types: pd.DataFrame,
+) -> None:
+    """Write colocalization pair-level significance tables."""
+
+    pair_statistics_all.to_csv(
+        configuration.results_directory / "cell_type_contact_pair_statistics_all.csv",
+        index=False,
+    )
+    pair_statistics_significant.to_csv(
+        configuration.results_directory
+        / "cell_type_contact_pair_statistics_significant.csv",
+        index=False,
+    )
+    excluded_low_count_types.to_csv(
+        configuration.results_directory
+        / "cell_type_contact_excluded_low_count_types.csv",
+        index=False,
+    )

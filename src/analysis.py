@@ -11,11 +11,11 @@ def run_clustering(
 ) -> None:
     """Run clustering on the annotated data."""
 
-    sc.pp.pca(annotated_data, pca_n_components)
+    sc.pp.pca(annotated_data, n_comps=pca_n_components)
     sc.pp.neighbors(annotated_data, metric="cosine")
     sc.tl.leiden(
         annotated_data,
-        0.5,
+        resolution=0.5,
         flavor="igraph",
     )
 
@@ -35,7 +35,7 @@ def rank_genes(
 
     sc.tl.rank_genes_groups(
         annotated_data,
-        "leiden",
+        groupby="leiden",
         layer="log_normalized",
         pts=True,
     )

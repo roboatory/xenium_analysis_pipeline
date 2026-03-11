@@ -18,6 +18,8 @@ class PipelineConfiguration:
     - the number of principal components for PCA
     - the neighborhood radius for spatial domains
     - the radius for cell-type contact colocalization
+    - the number of permutations for colocalization significance testing
+    - the minimum number of cells to test a cell type in colocalization
     - the number of spatial domains to infer with k-means
     - the number of top genes to use for enrichment analysis
     - the minimum log fold change for enrichment analysis
@@ -30,6 +32,8 @@ class PipelineConfiguration:
     pca_n_components: int
     neighborhood_radius: float
     colocalization_radius: float
+    colocalization_number_of_permutations: int
+    colocalization_minimum_cells: int
     domain_n_clusters: int
     rank_top_n: int
     minimum_logarithm_fold_change: float
@@ -48,7 +52,11 @@ class PipelineConfiguration:
             minimum_cells=int(data["minimum_cells"]),
             pca_n_components=int(data["pca_n_components"]),
             neighborhood_radius=float(data["neighborhood_radius"]),
-            colocalization_radius=float(data.get("colocalization_radius", 20.0)),
+            colocalization_radius=float(data["colocalization_radius"]),
+            colocalization_number_of_permutations=int(
+                data["colocalization_number_of_permutations"]
+            ),
+            colocalization_minimum_cells=int(data["colocalization_minimum_cells"]),
             domain_n_clusters=int(data["domain_n_clusters"]),
             rank_top_n=int(data["rank_top_n"]),
             minimum_logarithm_fold_change=float(data["minimum_logarithm_fold_change"]),
