@@ -91,9 +91,9 @@ def run_annotation_stage(configuration: Configuration) -> None:
 
     enriched_gene_lists = io.read_enriched_genes(configuration)
     cluster_annotations = annotation.annotate_clusters_with_llm(
-        annotation_evidence_by_cluster=enriched_gene_lists,
-        model=configuration.annotation_model,
-        evidence_type="marker_genes",
+        enriched_gene_lists,
+        configuration.annotation_model,
+        "marker_genes",
     )
     io.write_annotations(configuration, cluster_annotations, "cluster")
 
@@ -136,9 +136,9 @@ def run_neighborhood_stage(configuration: Configuration) -> None:
     )
     domain_signatures = analysis.build_domain_signatures(annotated_data)
     domain_annotations = annotation.annotate_clusters_with_llm(
-        annotation_evidence_by_cluster=domain_signatures,
-        model=configuration.annotation_model,
-        evidence_type="neighborhood_cell_types",
+        domain_signatures,
+        configuration.annotation_model,
+        "neighborhood_cell_types",
     )
 
     io.write_annotations(configuration, domain_annotations, "domain")
@@ -181,6 +181,40 @@ def run_colocalization_stage(configuration: Configuration) -> None:
     plotting.plot_colocalization_contact_row_proportions(
         configuration,
         row_proportions,
+    )
+
+    permutation_results = colocalization.compute_permutation_significance(
+        annotated_data,
+        configuration.pipeline.colocalization_radius,
+        label_key="cell_type",
+        number_of_permutations=(
+            configuration.pipeline.colocalization_number_of_permutations
+        ),
+        minimum_cells=configuration.pipeline.colocalization_minimum_cells,
+    )
+    io.write_colocalization_permutation_matrices(
+        configuration,
+        permutation_results["expected_counts"],
+        permutation_results["fold_enrichment"],
+        permutation_results["log2_fold_enrichment"],
+        permutation_results["empirical_p_values"],
+        permutation_results["fdr"],
+        permutation_results["significant_mask"],
+    )
+    io.write_colocalization_significance_tables(
+        configuration,
+        permutation_results["pair_statistics_all"],
+        permutation_results["pair_statistics_significant"],
+        permutation_results["excluded_low_count_types"],
+    )
+    plotting.plot_colocalization_log2_fold_enrichment(
+        configuration,
+        permutation_results["log2_fold_enrichment"],
+    )
+    plotting.plot_colocalization_log2_fold_enrichment_significant_only(
+        configuration,
+        permutation_results["log2_fold_enrichment"],
+        permutation_results["significant_mask"],
     )
 
 

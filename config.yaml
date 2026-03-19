@@ -9,6 +9,8 @@ pipeline:
   pca_n_components: 30
   neighborhood_radius: 50.0
   colocalization_radius: 20.0
+  colocalization_number_of_permutations: 1000
+  colocalization_minimum_cells: 30
   domain_n_clusters: 8
   rank_top_n: 30
   minimum_logarithm_fold_change: 0.5

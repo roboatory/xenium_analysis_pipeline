@@ -298,3 +298,93 @@ def plot_colocalization_contact_row_proportions(
         plt.close(figure)
     finally:
         plt.show = _show
+
+
+def plot_colocalization_log2_fold_enrichment(
+    configuration: Configuration,
+    log2_fold_enrichment: pd.DataFrame,
+) -> None:
+    """Plot heatmap of log2 fold enrichment from permutation testing."""
+
+    out_path = (
+        configuration.figures_directory
+        / "xenium_colocalization_log2_fold_enrichment.png"
+    )
+
+    _show = plt.show
+    plt.show = lambda: None
+    try:
+        _dpi = 600
+        figure, axis = plt.subplots(figsize=(12, 10), dpi=_dpi)
+        _render_log2_enrichment_heatmap(axis, log2_fold_enrichment)
+        figure.tight_layout()
+        figure.savefig(out_path, bbox_inches="tight", dpi=_dpi)
+        plt.close(figure)
+    finally:
+        plt.show = _show
+
+
+def plot_colocalization_log2_fold_enrichment_significant_only(
+    configuration: Configuration,
+    log2_fold_enrichment: pd.DataFrame,
+    significant_mask: pd.DataFrame,
+) -> None:
+    """Plot heatmap of log2 fold enrichment for significant pairs only."""
+
+    out_path = (
+        configuration.figures_directory
+        / "xenium_colocalization_log2_fold_enrichment_significant_only.png"
+    )
+    significant_only = log2_fold_enrichment.where(significant_mask, np.nan)
+
+    _show = plt.show
+    plt.show = lambda: None
+    try:
+        _dpi = 600
+        figure, axis = plt.subplots(figsize=(12, 10), dpi=_dpi)
+        _render_log2_enrichment_heatmap(
+            axis,
+            significant_only,
+            title="Significant 1st-degree contact enrichment (log2 FE)",
+        )
+        figure.tight_layout()
+        figure.savefig(out_path, bbox_inches="tight", dpi=_dpi)
+        plt.close(figure)
+    finally:
+        plt.show = _show
+
+
+def _render_log2_enrichment_heatmap(
+    axis: plt.Axes,
+    matrix: pd.DataFrame,
+    title: str = "1st-degree contact enrichment (log2 FE)",
+) -> None:
+    """Render a log2 enrichment heatmap or a no-data placeholder."""
+
+    values = matrix.to_numpy(dtype=float)
+    if values.size == 0:
+        axis.text(0.5, 0.5, "No tested cell-type pairs.", ha="center", va="center")
+        axis.set_axis_off()
+        return
+
+    finite_values = values[np.isfinite(values)]
+    if finite_values.size == 0:
+        axis.text(0.5, 0.5, "No finite enrichment values.", ha="center", va="center")
+        axis.set_axis_off()
+        return
+
+    max_abs = float(np.nanmax(np.abs(finite_values)))
+    if max_abs == 0.0:
+        max_abs = 1.0
+
+    image = axis.imshow(values, cmap="coolwarm", vmin=-max_abs, vmax=max_abs)
+    axis.set_xticks(np.arange(matrix.shape[1]))
+    axis.set_yticks(np.arange(matrix.shape[0]))
+    axis.set_xticklabels(matrix.columns)
+    axis.set_yticklabels(matrix.index)
+    axis.tick_params(axis="x", labelrotation=90)
+    axis.set_xlabel("cell type")
+    axis.set_ylabel("cell type")
+    axis.set_title(title)
+    colorbar = axis.figure.colorbar(image, ax=axis)
+    colorbar.set_label("log2(fold enrichment)")

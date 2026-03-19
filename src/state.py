@@ -29,6 +29,10 @@ def configuration_settings_snapshot(configuration: Configuration) -> dict[str, A
             "pca_n_components": pipeline.pca_n_components,
             "neighborhood_radius": pipeline.neighborhood_radius,
             "colocalization_radius": pipeline.colocalization_radius,
+            "colocalization_number_of_permutations": (
+                pipeline.colocalization_number_of_permutations
+            ),
+            "colocalization_minimum_cells": pipeline.colocalization_minimum_cells,
             "domain_n_clusters": pipeline.domain_n_clusters,
             "rank_top_n": pipeline.rank_top_n,
             "minimum_logarithm_fold_change": pipeline.minimum_logarithm_fold_change,
