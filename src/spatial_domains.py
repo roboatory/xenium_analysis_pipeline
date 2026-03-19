@@ -54,3 +54,27 @@ def assign_spatial_domains(
     labels = kmeans.fit_predict(composition_matrix).astype(str)
 
     annotated_data.obs["spatial_domain"] = pd.Categorical(labels)
+
+
+def build_domain_signatures(
+    annotated_data: AnnData,
+) -> dict[str, list[tuple[str, float]]]:
+    """Summarize each spatial domain by dominant neighborhood components."""
+
+    component_labels = annotated_data.obs["cell_type"].astype(str).unique().tolist()
+    composition = pd.DataFrame(
+        annotated_data.obsm["neighborhood_composition"],
+        index=annotated_data.obs_names,
+        columns=component_labels,
+    )
+    domain_means = composition.groupby(
+        annotated_data.obs["spatial_domain"].astype(str)
+    ).mean()
+
+    return {
+        str(domain_id): [
+            (str(cell_type), float(frequency))
+            for cell_type, frequency in row.sort_values(ascending=False).items()
+        ]
+        for domain_id, row in domain_means.iterrows()
+    }

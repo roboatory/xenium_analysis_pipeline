@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from anndata import AnnData
 import json
-import pandas as pd
+from pathlib import Path
 import shutil
+from typing import Any
 from uuid import uuid4
 
 from spatialdata import SpatialData, read_zarr
@@ -106,72 +107,8 @@ def write_labels(
     dataframe.to_csv(output_path, index=False)
 
 
-def write_colocalization_matrices(
-    configuration: Configuration,
-    counts: pd.DataFrame,
-    proportions: pd.DataFrame,
-) -> None:
-    """Write cell-type contact matrix artifacts."""
+def save_state(path: Path, state_payload: dict[str, Any]) -> None:
+    """Write run configuration snapshot JSON."""
 
-    counts_path = configuration.results_directory / "cell_type_contact_counts.csv"
-    proportions_path = (
-        configuration.results_directory / "cell_type_contact_row_proportions.csv"
-    )
-    counts.to_csv(counts_path)
-    proportions.to_csv(proportions_path)
-
-
-def write_colocalization_permutation_matrices(
-    configuration: Configuration,
-    expected_counts: pd.DataFrame,
-    fold_enrichment: pd.DataFrame,
-    log2_fold_enrichment: pd.DataFrame,
-    empirical_p_values: pd.DataFrame,
-    fdr: pd.DataFrame,
-    significant_mask: pd.DataFrame,
-) -> None:
-    """Write colocalization permutation and significance matrices."""
-
-    matrix_paths = {
-        "expected_counts": configuration.results_directory
-        / "cell_type_contact_expected_counts.csv",
-        "fold_enrichment": configuration.results_directory
-        / "cell_type_contact_fold_enrichment.csv",
-        "log2_fold_enrichment": configuration.results_directory
-        / "cell_type_contact_log2_fold_enrichment.csv",
-        "empirical_p_values": configuration.results_directory
-        / "cell_type_contact_empirical_p_values.csv",
-        "fdr": configuration.results_directory / "cell_type_contact_fdr.csv",
-        "significant_mask": configuration.results_directory
-        / "cell_type_contact_significant_mask.csv",
-    }
-    expected_counts.to_csv(matrix_paths["expected_counts"])
-    fold_enrichment.to_csv(matrix_paths["fold_enrichment"])
-    log2_fold_enrichment.to_csv(matrix_paths["log2_fold_enrichment"])
-    empirical_p_values.to_csv(matrix_paths["empirical_p_values"])
-    fdr.to_csv(matrix_paths["fdr"])
-    significant_mask.astype(int).to_csv(matrix_paths["significant_mask"])
-
-
-def write_colocalization_significance_tables(
-    configuration: Configuration,
-    pair_statistics_all: pd.DataFrame,
-    pair_statistics_significant: pd.DataFrame,
-    excluded_low_count_types: pd.DataFrame,
-) -> None:
-    """Write colocalization pair-level significance tables."""
-
-    pair_statistics_all.to_csv(
-        configuration.results_directory / "cell_type_contact_pair_statistics_all.csv",
-        index=False,
-    )
-    pair_statistics_significant.to_csv(
-        configuration.results_directory
-        / "cell_type_contact_pair_statistics_significant.csv",
-        index=False,
-    )
-    excluded_low_count_types.to_csv(
-        configuration.results_directory
-        / "cell_type_contact_excluded_low_count_types.csv",
-        index=False,
-    )
+    with path.open("w", encoding="utf-8") as file_handle:
+        json.dump(state_payload, file_handle, indent=2, sort_keys=True)

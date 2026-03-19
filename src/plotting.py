@@ -247,21 +247,21 @@ def plot_colocalization_contact_counts(
     plt.show = lambda: None
     try:
         _dpi = 600
-        figure, axis = plt.subplots(figsize=(12, 10), dpi=_dpi)
-        image = axis.imshow(np.log1p(counts.to_numpy()), cmap="magma")
-        axis.set_xticks(np.arange(counts.shape[1]))
-        axis.set_yticks(np.arange(counts.shape[0]))
-        axis.set_xticklabels(counts.columns)
-        axis.set_yticklabels(counts.index)
-        axis.tick_params(axis="x", labelrotation=90)
-        axis.set_xlabel("cell type")
-        axis.set_ylabel("cell type")
-        axis.set_title("Observed 1st-degree contacts (log1p counts)")
-        colorbar = figure.colorbar(image, ax=axis)
+        fig, ax = plt.subplots(figsize=(12, 10), dpi=_dpi)
+        image = ax.imshow(np.log1p(counts.to_numpy()), cmap="magma")
+        ax.set_xticks(np.arange(counts.shape[1]))
+        ax.set_yticks(np.arange(counts.shape[0]))
+        ax.set_xticklabels(counts.columns)
+        ax.set_yticklabels(counts.index)
+        ax.tick_params(axis="x", labelrotation=90)
+        ax.set_xlabel("cell type")
+        ax.set_ylabel("cell type")
+        ax.set_title("observed first degree contacts")
+        colorbar = fig.colorbar(image, ax=ax)
         colorbar.set_label("log1p(contact count)")
-        figure.tight_layout()
-        figure.savefig(out_path, bbox_inches="tight", dpi=_dpi)
-        plt.close(figure)
+        fig.tight_layout()
+        fig.savefig(out_path, bbox_inches="tight", dpi=_dpi)
+        plt.close(fig)
     finally:
         plt.show = _show
 
@@ -281,21 +281,21 @@ def plot_colocalization_contact_row_proportions(
     plt.show = lambda: None
     try:
         _dpi = 600
-        figure, axis = plt.subplots(figsize=(12, 10), dpi=_dpi)
-        image = axis.imshow(proportions.to_numpy(), cmap="viridis", vmin=0.0, vmax=1.0)
-        axis.set_xticks(np.arange(proportions.shape[1]))
-        axis.set_yticks(np.arange(proportions.shape[0]))
-        axis.set_xticklabels(proportions.columns)
-        axis.set_yticklabels(proportions.index)
-        axis.tick_params(axis="x", labelrotation=90)
-        axis.set_xlabel("cell type")
-        axis.set_ylabel("cell type")
-        axis.set_title("Observed 1st-degree contacts (row-normalized)")
-        colorbar = figure.colorbar(image, ax=axis)
+        fig, ax = plt.subplots(figsize=(12, 10), dpi=_dpi)
+        image = ax.imshow(proportions.to_numpy(), cmap="viridis", vmin=0.0, vmax=1.0)
+        ax.set_xticks(np.arange(proportions.shape[1]))
+        ax.set_yticks(np.arange(proportions.shape[0]))
+        ax.set_xticklabels(proportions.columns)
+        ax.set_yticklabels(proportions.index)
+        ax.tick_params(axis="x", labelrotation=90)
+        ax.set_xlabel("cell type")
+        ax.set_ylabel("cell type")
+        ax.set_title("observed first degree contacts (row-normalized)")
+        colorbar = fig.colorbar(image, ax=ax)
         colorbar.set_label("row-normalized contact proportion")
-        figure.tight_layout()
-        figure.savefig(out_path, bbox_inches="tight", dpi=_dpi)
-        plt.close(figure)
+        fig.tight_layout()
+        fig.savefig(out_path, bbox_inches="tight", dpi=_dpi)
+        plt.close(fig)
     finally:
         plt.show = _show
 
@@ -316,7 +316,9 @@ def plot_colocalization_log2_fold_enrichment(
     try:
         _dpi = 600
         figure, axis = plt.subplots(figsize=(12, 10), dpi=_dpi)
-        _render_log2_enrichment_heatmap(axis, log2_fold_enrichment)
+        _render_log2_enrichment_heatmap(
+            axis, log2_fold_enrichment, title="first-degree contact enrichment"
+        )
         figure.tight_layout()
         figure.savefig(out_path, bbox_inches="tight", dpi=_dpi)
         plt.close(figure)
@@ -345,7 +347,7 @@ def plot_colocalization_log2_fold_enrichment_significant_only(
         _render_log2_enrichment_heatmap(
             axis,
             significant_only,
-            title="Significant 1st-degree contact enrichment (log2 FE)",
+            title="significant first-degree contact enrichment",
         )
         figure.tight_layout()
         figure.savefig(out_path, bbox_inches="tight", dpi=_dpi)
@@ -357,21 +359,12 @@ def plot_colocalization_log2_fold_enrichment_significant_only(
 def _render_log2_enrichment_heatmap(
     axis: plt.Axes,
     matrix: pd.DataFrame,
-    title: str = "1st-degree contact enrichment (log2 FE)",
+    title: str,
 ) -> None:
-    """Render a log2 enrichment heatmap or a no-data placeholder."""
+    """Render an enrichment heatmap or a no-data placeholder."""
 
     values = matrix.to_numpy(dtype=float)
-    if values.size == 0:
-        axis.text(0.5, 0.5, "No tested cell-type pairs.", ha="center", va="center")
-        axis.set_axis_off()
-        return
-
     finite_values = values[np.isfinite(values)]
-    if finite_values.size == 0:
-        axis.text(0.5, 0.5, "No finite enrichment values.", ha="center", va="center")
-        axis.set_axis_off()
-        return
 
     max_abs = float(np.nanmax(np.abs(finite_values)))
     if max_abs == 0.0:

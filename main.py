@@ -8,9 +8,9 @@ from src import (
     annotation,
     colocalization,
     io,
-    neighborhood,
     plotting,
     preprocessing,
+    spatial_domains,
     state,
 )
 from src.config import Configuration
@@ -128,13 +128,13 @@ def run_neighborhood_stage(configuration: Configuration) -> None:
     spatial_data = io.read_spatialdata_zarr(configuration)
     annotated_data = spatial_data["table"]
 
-    neighborhood.compute_neighborhood_composition(
-        annotated_data, configuration.pipeline.neighborhood_radius
+    spatial_domains.compute_neighborhood_composition(
+        annotated_data, configuration.pipeline.neighborhood_colocalization_radius
     )
-    neighborhood.assign_spatial_domains(
+    spatial_domains.assign_spatial_domains(
         annotated_data, configuration.pipeline.domain_n_clusters
     )
-    domain_signatures = analysis.build_domain_signatures(annotated_data)
+    domain_signatures = spatial_domains.build_domain_signatures(annotated_data)
     domain_annotations = annotation.annotate_clusters_with_llm(
         domain_signatures,
         configuration.annotation_model,
@@ -173,10 +173,7 @@ def run_colocalization_stage(configuration: Configuration) -> None:
 
     counts, row_proportions = colocalization.compute_observed_contact_matrices(
         annotated_data,
-        configuration.pipeline.colocalization_radius,
-        label_key="cell_type",
     )
-    io.write_colocalization_matrices(configuration, counts, row_proportions)
     plotting.plot_colocalization_contact_counts(configuration, counts)
     plotting.plot_colocalization_contact_row_proportions(
         configuration,
@@ -185,27 +182,10 @@ def run_colocalization_stage(configuration: Configuration) -> None:
 
     permutation_results = colocalization.compute_permutation_significance(
         annotated_data,
-        configuration.pipeline.colocalization_radius,
-        label_key="cell_type",
         number_of_permutations=(
             configuration.pipeline.colocalization_number_of_permutations
         ),
         minimum_cells=configuration.pipeline.colocalization_minimum_cells,
-    )
-    io.write_colocalization_permutation_matrices(
-        configuration,
-        permutation_results["expected_counts"],
-        permutation_results["fold_enrichment"],
-        permutation_results["log2_fold_enrichment"],
-        permutation_results["empirical_p_values"],
-        permutation_results["fdr"],
-        permutation_results["significant_mask"],
-    )
-    io.write_colocalization_significance_tables(
-        configuration,
-        permutation_results["pair_statistics_all"],
-        permutation_results["pair_statistics_significant"],
-        permutation_results["excluded_low_count_types"],
     )
     plotting.plot_colocalization_log2_fold_enrichment(
         configuration,
@@ -235,7 +215,7 @@ def main() -> None:
 
     state_path = state.build_state_path(configuration)
     configuration_snapshot = state.configuration_settings_snapshot(configuration)
-    state.save_state(state_path, configuration_snapshot)
+    io.save_state(state_path, configuration_snapshot)
 
 
 if __name__ == "__main__":

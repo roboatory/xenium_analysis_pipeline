@@ -7,8 +7,7 @@ pipeline:
   maximum_counts_quantile: 0.99
   minimum_cells: 100
   pca_n_components: 30
-  neighborhood_radius: 50.0
-  colocalization_radius: 20.0
+  neighborhood_colocalization_radius: 50.0
   colocalization_number_of_permutations: 1000
   colocalization_minimum_cells: 30
   domain_n_clusters: 8

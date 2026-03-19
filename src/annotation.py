@@ -17,21 +17,31 @@ def annotate_clusters_with_llm(
     """Annotate clusters using a local Ollama-compatible LLM."""
 
     is_marker_mode = evidence_type == "marker_genes"
+    number_of_clusters = len(annotation_evidence_by_cluster)
     evidence_label = (
         "marker genes" if is_marker_mode else "neighboring cell-type composition"
+    )
+    uniqueness_instruction = (
+        f"You must return exactly {number_of_clusters} annotations with exactly "
+        f"{number_of_clusters} unique cell_type labels. Consider two labels "
+        "duplicates if they become the same after lowercasing and removing "
+        "spaces, punctuation, or singular/plural variation. Keep an internal "
+        "set of already-used labels and rewrite any candidate label that would "
+        "collide before you return JSON. "
     )
     system_instruction = (
         "You are a domain expert in prostate cancer spatial transcriptomics. "
         "Use maximally specific labels (lineage + subtype + state), keep "
-        f"labels biologically plausible from {evidence_label}, and keep every "
-        "cluster cell_type string globally unique. Return JSON only."
+        f"labels biologically plausible from {evidence_label}. "
+        f"{uniqueness_instruction}"
+        "Return JSON only."
         if is_marker_mode
         else (
             "You are a domain expert in prostate cancer spatial transcriptomics. "
             "Given neighboring cell-type composition, assign spatial-domain "
             "microenvironment labels (niche/interface/transition zone), not raw "
-            "single-cell-type labels. Keep every cluster cell_type string globally "
-            "unique. Return JSON only."
+            f"single-cell-type labels. {uniqueness_instruction}"
+            "Return JSON only."
         )
     )
 
@@ -59,21 +69,16 @@ def annotate_clusters_with_llm(
         timeout_seconds,
     )
 
-    raw_content = response.get("message", {}).get("content", "")
-    try:
-        return _parse_and_normalize(
-            raw_content,
-            annotation_evidence_by_cluster,
-        )
-    except (RuntimeError, ValueError):
-        return {
-            str(cluster_id): {
-                "cell_type": f"unknown_cluster_{cluster_id}",
-                "confidence": 0.0,
-                "rationale": "LLM output was not valid structured JSON.",
-            }
-            for cluster_id in sorted(annotation_evidence_by_cluster.keys(), key=str)
+    raw_content = response["message"]["content"]
+    parsed_response = json.loads(raw_content)
+    return {
+        str(annotation["cluster_id"]): {
+            "cell_type": annotation["cell_type"],
+            "confidence": float(annotation["confidence"]),
+            "rationale": annotation["rationale"],
         }
+        for annotation in parsed_response["annotations"]
+    }
 
 
 def _build_annotation_prompt(
@@ -83,6 +88,7 @@ def _build_annotation_prompt(
     """Build prompt with schema and per-cluster annotation evidence."""
 
     is_marker_mode = evidence_type == "marker_genes"
+    number_of_clusters = len(annotation_evidence_by_cluster)
     evidence_label = (
         "marker genes" if is_marker_mode else "dominant neighboring cell types"
     )
@@ -93,12 +99,14 @@ def _build_annotation_prompt(
             f"Annotate each cluster with one main cell type label from {evidence_label}.",
             "Be as specific as possible (lineage + subtype + functional state).",
             f"If clusters are similar, disambiguate using {support_phrase} states.",
+            f"The final JSON must contain exactly {number_of_clusters} annotations and exactly {number_of_clusters} unique cell_type labels.",
             "Cell type labels must be globally unique across clusters.",
             "Treat labels as duplicates if they differ only by case, spacing, punctuation, or singular/plural form.",
+            "Maintain an internal used-label list as you assign labels; if a new label matches any earlier label after normalization, rewrite it before continuing.",
             "Do not reuse any label string across clusters.",
             "When disambiguating, use biologically meaningful qualifiers (lineage/subtype/state), not generic numbering.",
             "Bad: 'T cell' and 'T-cell' (duplicate). Good: 'Cytotoxic T-cell effector state' and 'Exhausted T-cell state'.",
-            "Before returning JSON, verify there are zero duplicate cell_type labels; if duplicates exist, rewrite and re-check.",
+            f"Before returning JSON, verify both checks pass: annotation count = {number_of_clusters} and unique normalized cell_type count = {number_of_clusters}. If either check fails, rewrite and re-check.",
             "Return JSON using this schema only:",
             '{ "annotations": [{ "cluster_id": "0", "cell_type": "label", "confidence": 0.0, "rationale": "..." }] }',
             "Confidence must be a number in [0, 1].",
@@ -112,12 +120,14 @@ def _build_annotation_prompt(
             "Do not output only a single raw cell type name; use niche/interface/transition-zone wording.",
             "Good label styles: 'Tumor-immune interface', 'Fibro-inflammatory stroma niche', 'Basal-luminal transition zone'.",
             f"If domains are similar, disambiguate with {support_phrase} context.",
+            f"The final JSON must contain exactly {number_of_clusters} annotations and exactly {number_of_clusters} unique cell_type labels.",
             "Cell type labels must be globally unique across clusters.",
             "Treat labels as duplicates if they differ only by case, spacing, punctuation, or singular/plural form.",
+            "Maintain an internal used-label list as you assign labels; if a new label matches any earlier label after normalization, rewrite it before continuing.",
             "Do not reuse any label string across clusters.",
             "When disambiguating, use ecological qualifiers (niche/interface/transition/perivascular/stromal-adjacent).",
             "Bad: 'Tumor-immune interface' and 'tumor immune interface' (duplicate). Good: 'Tumor-immune interface' and 'Perivascular tumor-immune niche'.",
-            "Before returning JSON, verify there are zero duplicate cell_type labels; if duplicates exist, rewrite and re-check.",
+            f"Before returning JSON, verify both checks pass: annotation count = {number_of_clusters} and unique normalized cell_type count = {number_of_clusters}. If either check fails, rewrite and re-check.",
             "Return JSON using this schema only:",
             '{ "annotations": [{ "cluster_id": "0", "cell_type": "label", "confidence": 0.0, "rationale": "..." }] }',
             "Confidence must be a number in [0, 1].",
@@ -172,128 +182,6 @@ def _ollama_chat(
     except json.JSONDecodeError as error:
         message = "Local LLM returned invalid JSON."
         raise RuntimeError(message) from error
-
-
-def _parse_and_normalize(
-    raw_content: str,
-    annotation_evidence_by_cluster: dict[str, list[object]],
-) -> dict[str, dict[str, Any]]:
-    """Parse model output, normalize fields, and fill missing clusters."""
-
-    content = raw_content.strip()
-    if not content:
-        message = "Local LLM returned empty content."
-        raise ValueError(message)
-
-    if content.startswith("```"):
-        lines = content.splitlines()
-        if lines and lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        content = "\n".join(lines).strip()
-        if content[:4].lower() == "json":
-            content = content[4:].strip()
-
-    candidates = [content]
-    if "{" in content and "}" in content:
-        start, end = content.find("{"), content.rfind("}")
-        if end > start:
-            candidates.append(content[start : end + 1])
-    if "[" in content and "]" in content:
-        start, end = content.find("["), content.rfind("]")
-        if end > start:
-            candidates.append(content[start : end + 1])
-
-    parsed: Any | None = None
-    for candidate in dict.fromkeys(candidates):
-        try:
-            parsed = json.loads(candidate)
-            break
-        except json.JSONDecodeError:
-            continue
-    if parsed is None:
-        message = "Could not parse JSON from LLM response."
-        raise RuntimeError(message)
-
-    if isinstance(parsed, dict):
-        for key in ("annotations", "clusters", "results", "data"):
-            value = parsed.get(key)
-            if isinstance(value, (dict, list)):
-                parsed = value
-                break
-
-    raw_items: list[tuple[str, Any]] = []
-    if isinstance(parsed, dict):
-        raw_items = [(str(cluster_id), value) for cluster_id, value in parsed.items()]
-    elif isinstance(parsed, list):
-        for item in parsed:
-            if not isinstance(item, dict):
-                continue
-            cluster_id = (
-                item.get("cluster_id")
-                or item.get("cluster")
-                or item.get("id")
-                or item.get("group")
-            )
-            if cluster_id is not None:
-                raw_items.append((str(cluster_id), item))
-            elif len(item) == 1:
-                ((cluster_id, value),) = item.items()
-                raw_items.append((str(cluster_id), value))
-
-    if not raw_items:
-        message = (
-            "Annotation response must be a dictionary, or a list of objects with "
-            "'cluster_id'/'cluster'/'id'/'group'."
-        )
-        raise ValueError(message)
-
-    normalized: dict[str, dict[str, Any]] = {}
-    for cluster_id, value in raw_items:
-        if isinstance(value, str):
-            value = {"cell_type": value, "confidence": 0.0, "rationale": ""}
-        if not isinstance(value, dict):
-            continue
-
-        cell_type = str(
-            value.get("cell_type")
-            or value.get("label")
-            or value.get("type")
-            or "unknown"
-        ).strip()
-        rationale = str(
-            value.get("rationale")
-            or value.get("reason")
-            or value.get("explanation")
-            or ""
-        ).strip()
-
-        confidence_raw = value.get("confidence", value.get("score", 0.0))
-        try:
-            confidence = float(confidence_raw)
-        except (TypeError, ValueError):
-            confidence = 0.0
-        if confidence > 1.0 and confidence <= 100.0:
-            confidence = confidence / 100.0
-        confidence = max(0.0, min(confidence, 1.0))
-
-        normalized[cluster_id] = {
-            "cell_type": cell_type or "unknown",
-            "confidence": confidence,
-            "rationale": rationale,
-        }
-
-    for cluster_id in sorted(annotation_evidence_by_cluster.keys(), key=str):
-        cluster_key = str(cluster_id)
-        if cluster_key not in normalized:
-            normalized[cluster_key] = {
-                "cell_type": f"unknown_cluster_{cluster_key}",
-                "confidence": 0.0,
-                "rationale": "Model did not return an annotation for this cluster.",
-            }
-
-    return normalized
 
 
 def _annotation_schema() -> dict[str, Any]:

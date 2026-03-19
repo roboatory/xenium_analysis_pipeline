@@ -16,8 +16,7 @@ class PipelineConfiguration:
     - the maximum counts quantile
     - the minimum number of cells per gene
     - the number of principal components for PCA
-    - the neighborhood radius for spatial domains
-    - the radius for cell-type contact colocalization
+    - the shared radius for spatial domains and cell-type colocalization
     - the number of permutations for colocalization significance testing
     - the minimum number of cells to test a cell type in colocalization
     - the number of spatial domains to infer with k-means
@@ -30,8 +29,7 @@ class PipelineConfiguration:
     maximum_counts_quantile: float
     minimum_cells: int
     pca_n_components: int
-    neighborhood_radius: float
-    colocalization_radius: float
+    neighborhood_colocalization_radius: float
     colocalization_number_of_permutations: int
     colocalization_minimum_cells: int
     domain_n_clusters: int
@@ -51,8 +49,9 @@ class PipelineConfiguration:
             maximum_counts_quantile=float(data["maximum_counts_quantile"]),
             minimum_cells=int(data["minimum_cells"]),
             pca_n_components=int(data["pca_n_components"]),
-            neighborhood_radius=float(data["neighborhood_radius"]),
-            colocalization_radius=float(data["colocalization_radius"]),
+            neighborhood_colocalization_radius=float(
+                data["neighborhood_colocalization_radius"]
+            ),
             colocalization_number_of_permutations=int(
                 data["colocalization_number_of_permutations"]
             ),
