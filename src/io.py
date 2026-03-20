@@ -10,6 +10,9 @@ from uuid import uuid4
 from spatialdata import SpatialData, read_zarr
 
 from .config import Configuration
+from .logging_utils import get_logger
+
+logger = get_logger(__name__)
 
 
 def read_spatialdata_zarr(
@@ -17,7 +20,9 @@ def read_spatialdata_zarr(
 ) -> SpatialData:
     """Read processed zarr file from the processed data directory."""
 
-    return read_zarr(configuration.processed_data_directory / "processed.zarr")
+    path = configuration.processed_data_directory / "processed.zarr"
+    logger.debug("reading spatialdata zarr from %s", path)
+    return read_zarr(path)
 
 
 def write_spatialdata_zarr(
@@ -35,6 +40,7 @@ def write_spatialdata_zarr(
         if target_path.exists():
             shutil.rmtree(target_path)
         temporary_path.rename(target_path)
+        logger.debug("wrote spatialdata zarr to %s", target_path)
     finally:
         if temporary_path.exists():
             shutil.rmtree(temporary_path)
@@ -51,10 +57,12 @@ def read_enriched_genes(
     with enriched_genes_path.open("r") as file_handle:
         data = json.load(file_handle)
 
-    return {
+    enriched_genes = {
         str(cluster_id): [str(gene) for gene in genes]
         for cluster_id, genes in data.items()
     }
+    logger.debug("loaded enriched gene sets from %s", enriched_genes_path)
+    return enriched_genes
 
 
 def write_enriched_genes(
@@ -68,6 +76,7 @@ def write_enriched_genes(
     )
     with enriched_genes_path.open("w") as file_handle:
         json.dump(enriched_genes, file_handle, indent=2)
+    logger.debug("wrote enriched gene sets to %s", enriched_genes_path)
 
 
 def write_annotations(
@@ -84,6 +93,7 @@ def write_annotations(
     annotations_path = annotation_paths[target]
     with annotations_path.open("w") as file_handle:
         json.dump(annotations, file_handle, indent=2)
+    logger.debug("wrote %s annotations to %s", target, annotations_path)
 
 
 def write_labels(
@@ -105,6 +115,7 @@ def write_labels(
     )
     dataframe.insert(0, "cell_id", annotated_data.obs["cell_id"])
     dataframe.to_csv(output_path, index=False)
+    logger.debug("wrote %s labels to %s", target, output_path)
 
 
 def save_state(path: Path, state_payload: dict[str, Any]) -> None:
@@ -112,3 +123,4 @@ def save_state(path: Path, state_payload: dict[str, Any]) -> None:
 
     with path.open("w", encoding="utf-8") as file_handle:
         json.dump(state_payload, file_handle, indent=2, sort_keys=True)
+    logger.debug("saved run state to %s", path)

@@ -6,6 +6,10 @@ from typing import Any
 
 import yaml
 
+from .logging_utils import get_logger
+
+logger = get_logger(__name__)
+
 
 @dataclass(frozen=True)
 class PipelineConfiguration:
@@ -99,6 +103,7 @@ class Configuration:
     processed_data_directory: Path | None = None
     results_directory: Path | None = None
     figures_directory: Path | None = None
+    logs_directory: Path | None = None
     annotation_model: str = "llama3.1:8b"
     pipeline: PipelineConfiguration | None = None
     plots: PlotsConfiguration | None = None
@@ -120,21 +125,33 @@ class Configuration:
         self.processed_data_directory = output_directory / "processed"
         self.results_directory = output_directory / "analysis"
         self.figures_directory = output_directory / "figures"
+        self.logs_directory = output_directory / "logs"
         self.annotation_model = str(
             configuration.get("annotation_model", self.annotation_model)
         )
         self.pipeline = PipelineConfiguration.from_dictionary(configuration["pipeline"])
         self.plots = PlotsConfiguration.from_dictionary(configuration["plots"])
+        logger.debug(
+            "loaded configuration from %s with output root %s",
+            configuration_path,
+            self.output_directory,
+        )
 
     def create_directories(
         self: type[Configuration],
     ) -> None:
         """Ensure all output directories exist."""
 
-        for path in (
+        paths = (
             self.processed_data_directory,
             self.results_directory,
             self.figures_directory,
-        ):
+            self.logs_directory,
+        )
+        for path in paths:
             if path is not None:
                 path.mkdir(parents=True, exist_ok=True)
+
+        for path in paths:
+            if path is not None:
+                logger.debug("ensured output directory exists: %s", path)

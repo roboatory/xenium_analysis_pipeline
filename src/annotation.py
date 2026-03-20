@@ -5,6 +5,10 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from .logging_utils import get_logger
+
+logger = get_logger(__name__)
+
 
 def annotate_clusters_with_llm(
     annotation_evidence_by_cluster: dict[str, list[object]],
@@ -16,6 +20,12 @@ def annotate_clusters_with_llm(
 ) -> dict[str, dict[str, Any]]:
     """Annotate clusters using a local Ollama-compatible LLM."""
 
+    logger.info(
+        "annotating %s groups with %s (%s)",
+        len(annotation_evidence_by_cluster),
+        model,
+        evidence_type,
+    )
     is_marker_mode = evidence_type == "marker_genes"
     number_of_clusters = len(annotation_evidence_by_cluster)
     evidence_label = (
@@ -71,7 +81,7 @@ def annotate_clusters_with_llm(
 
     raw_content = response["message"]["content"]
     parsed_response = json.loads(raw_content)
-    return {
+    annotations = {
         str(annotation["cluster_id"]): {
             "cell_type": annotation["cell_type"],
             "confidence": float(annotation["confidence"]),
@@ -79,6 +89,8 @@ def annotate_clusters_with_llm(
         }
         for annotation in parsed_response["annotations"]
     }
+    logger.info("annotated %s groups", len(annotations))
+    return annotations
 
 
 def _build_annotation_prompt(
@@ -163,6 +175,7 @@ def _ollama_chat(
     """Call an Ollama-compatible /api/chat endpoint."""
 
     url = f"{host.rstrip('/')}/api/chat"
+    logger.debug("sending annotation request to %s", url)
     request = Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
@@ -174,13 +187,15 @@ def _ollama_chat(
         with urlopen(request, timeout=timeout_seconds) as response:
             body = response.read().decode("utf-8")
     except (HTTPError, URLError) as error:
-        message = f"Failed to reach local LLM at {url}: {error}"
+        message = f"failed to reach local LLM at {url}: {error}"
+        logger.error(message)
         raise RuntimeError(message) from error
 
     try:
         return json.loads(body)
     except json.JSONDecodeError as error:
-        message = "Local LLM returned invalid JSON."
+        message = "local LLM returned invalid JSON."
+        logger.error(message)
         raise RuntimeError(message) from error
 
 

@@ -14,6 +14,10 @@ import spatialdata_plot  # noqa: F401
 from anndata import AnnData
 import pandas as pd
 
+from .logging_utils import get_logger
+
+logger = get_logger(__name__)
+
 
 def plot_cell_and_nucleus_boundaries(
     configuration: Configuration,
@@ -22,6 +26,7 @@ def plot_cell_and_nucleus_boundaries(
     """Plot cell and nucleus boundaries."""
 
     out_path = configuration.figures_directory / "xenium_cell_nucleus_boundaries.png"
+    logger.debug("rendering cell and nucleus boundary plot to %s", out_path)
 
     _show = plt.show
     plt.show = lambda: None
@@ -50,6 +55,7 @@ def plot_cell_and_nucleus_boundaries(
         ax.axis("off")
         fig.savefig(out_path, bbox_inches="tight", dpi=_dpi)
         plt.close(fig)
+        logger.debug("saved figure %s", out_path)
     finally:
         plt.show = _show
 
@@ -66,6 +72,7 @@ def plot_transcripts(
     out_path = (
         configuration.figures_directory / f"xenium_transcripts_{'_'.join(genes)}.png"
     )
+    logger.debug("rendering transcript plot for genes=%s to %s", genes, out_path)
 
     _show = plt.show
     plt.show = lambda: None
@@ -87,6 +94,7 @@ def plot_transcripts(
         ax.axis("off")
         fig.savefig(out_path, bbox_inches="tight", dpi=_dpi)
         plt.close(fig)
+        logger.debug("saved figure %s", out_path)
     finally:
         plt.show = _show
 
@@ -100,6 +108,7 @@ def plot_qc_histogram(
     """Plot QC histogram."""
 
     out_path = configuration.figures_directory / "xenium_transcripts_per_cell.png"
+    logger.debug("rendering QC histogram to %s", out_path)
 
     cutoffs = [
         int(cutoffs[0]),
@@ -132,6 +141,7 @@ def plot_qc_histogram(
 
         figure.savefig(out_path, bbox_inches="tight", dpi=_dpi)
         plt.close(figure)
+        logger.debug("saved figure %s", out_path)
     finally:
         plt.show = _show
 
@@ -144,6 +154,7 @@ def plot_umap_leiden(
 
     out_path = configuration.figures_directory / "umap_leiden.png"
     annotated_data = spatial_data["table"]
+    logger.debug("rendering UMAP plot to %s", out_path)
 
     _show = plt.show
     plt.show = lambda: None
@@ -157,6 +168,7 @@ def plot_umap_leiden(
         )
         umap_figure.savefig(out_path, bbox_inches="tight", dpi=_dpi)
         plt.close(umap_figure)
+        logger.debug("saved figure %s", out_path)
     finally:
         plt.show = _show
 
@@ -169,6 +181,7 @@ def plot_cluster_overlay(
     """Plot cell shapes colored by cluster labels (e.g. Leiden)."""
 
     out_path = configuration.figures_directory / f"xenium_{cluster_key}_overlay.png"
+    logger.debug("rendering overlay for %s to %s", cluster_key, out_path)
     table = spatial_data.tables["table"]
     gdf = spatial_data.shapes["cell_boundaries"].copy()
 
@@ -202,6 +215,7 @@ def plot_cluster_overlay(
         ax.invert_yaxis()
         fig.savefig(out_path, bbox_inches="tight", dpi=_dpi)
         plt.close(fig)
+        logger.debug("saved figure %s", out_path)
     finally:
         plt.show = _show
 
@@ -214,6 +228,7 @@ def plot_rank_genes_dotplot(
     """Plot rank genes groups dotplot."""
 
     out_path = configuration.figures_directory / f"rank_genes_dotplot_top_{n_genes}.png"
+    logger.debug("rendering ranked-genes dotplot to %s", out_path)
 
     _show = plt.show
     plt.show = lambda: None
@@ -229,6 +244,7 @@ def plot_rank_genes_dotplot(
         fig = dotplot.fig
         fig.savefig(out_path, bbox_inches="tight", dpi=_dpi)
         plt.close(fig)
+        logger.debug("saved figure %s", out_path)
     finally:
         plt.show = _show
 
@@ -242,6 +258,7 @@ def plot_colocalization_contact_counts(
     out_path = (
         configuration.figures_directory / "xenium_colocalization_contact_counts.png"
     )
+    logger.debug("rendering colocalization count heatmap to %s", out_path)
 
     _show = plt.show
     plt.show = lambda: None
@@ -262,6 +279,7 @@ def plot_colocalization_contact_counts(
         fig.tight_layout()
         fig.savefig(out_path, bbox_inches="tight", dpi=_dpi)
         plt.close(fig)
+        logger.debug("saved figure %s", out_path)
     finally:
         plt.show = _show
 
@@ -276,6 +294,7 @@ def plot_colocalization_contact_row_proportions(
         configuration.figures_directory
         / "xenium_colocalization_contact_row_proportions.png"
     )
+    logger.debug("rendering row-normalized colocalization heatmap to %s", out_path)
 
     _show = plt.show
     plt.show = lambda: None
@@ -296,6 +315,7 @@ def plot_colocalization_contact_row_proportions(
         fig.tight_layout()
         fig.savefig(out_path, bbox_inches="tight", dpi=_dpi)
         plt.close(fig)
+        logger.debug("saved figure %s", out_path)
     finally:
         plt.show = _show
 
@@ -310,6 +330,7 @@ def plot_colocalization_log2_fold_enrichment(
         configuration.figures_directory
         / "xenium_colocalization_log2_fold_enrichment.png"
     )
+    logger.debug("rendering log2 fold enrichment heatmap to %s", out_path)
 
     _show = plt.show
     plt.show = lambda: None
@@ -322,6 +343,7 @@ def plot_colocalization_log2_fold_enrichment(
         figure.tight_layout()
         figure.savefig(out_path, bbox_inches="tight", dpi=_dpi)
         plt.close(figure)
+        logger.debug("saved figure %s", out_path)
     finally:
         plt.show = _show
 
@@ -337,6 +359,7 @@ def plot_colocalization_log2_fold_enrichment_significant_only(
         configuration.figures_directory
         / "xenium_colocalization_log2_fold_enrichment_significant_only.png"
     )
+    logger.debug("rendering significant-only enrichment heatmap to %s", out_path)
     significant_only = log2_fold_enrichment.where(significant_mask, np.nan)
 
     _show = plt.show
@@ -352,6 +375,7 @@ def plot_colocalization_log2_fold_enrichment_significant_only(
         figure.tight_layout()
         figure.savefig(out_path, bbox_inches="tight", dpi=_dpi)
         plt.close(figure)
+        logger.debug("saved figure %s", out_path)
     finally:
         plt.show = _show
 

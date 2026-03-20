@@ -14,8 +14,10 @@ from src import (
     state,
 )
 from src.config import Configuration
+from src.logging_utils import clear_active_log, get_logger, initialize_logging
 
 CONFIG_PATH = Path("config.yaml").resolve()
+logger = get_logger(__name__)
 
 
 def load_configuration() -> Configuration:
@@ -24,12 +26,14 @@ def load_configuration() -> Configuration:
     configuration = Configuration()
     configuration.load_from_yaml(CONFIG_PATH)
     configuration.create_directories()
+    initialize_logging(configuration.logs_directory, reset=False)
     return configuration
 
 
 def run_preprocess_cluster_stage(configuration: Configuration) -> None:
     """Run preprocessing and clustering steps on pre-ingested data."""
 
+    logger.info("stage: preprocess and cluster")
     spatial_data = io.read_spatialdata_zarr(configuration)
     annotated_data = spatial_data["table"]
 
@@ -86,6 +90,7 @@ def run_preprocess_cluster_stage(configuration: Configuration) -> None:
 def run_annotation_stage(configuration: Configuration) -> None:
     """Run LLM-driven cell-type annotation and persist updated zarr."""
 
+    logger.info("stage: annotate clusters")
     spatial_data = io.read_spatialdata_zarr(configuration)
     annotated_data = spatial_data["table"]
 
@@ -125,6 +130,7 @@ def run_annotation_stage(configuration: Configuration) -> None:
 def run_neighborhood_stage(configuration: Configuration) -> None:
     """Run neighborhood analysis and persist updated zarr."""
 
+    logger.info("stage: spatial domains")
     spatial_data = io.read_spatialdata_zarr(configuration)
     annotated_data = spatial_data["table"]
 
@@ -168,6 +174,7 @@ def run_neighborhood_stage(configuration: Configuration) -> None:
 def run_colocalization_stage(configuration: Configuration) -> None:
     """Run observed cell-type contact colocalization and write artifacts."""
 
+    logger.info("stage: colocalization")
     spatial_data = io.read_spatialdata_zarr(configuration)
     annotated_data = spatial_data["table"]
 
@@ -200,12 +207,14 @@ def run_colocalization_stage(configuration: Configuration) -> None:
 
 def main() -> None:
     configuration = load_configuration()
+    logger.info("pipeline start")
     ingested_path = configuration.processed_data_directory / "processed.zarr"
     if not ingested_path.exists():
         msg = (
-            f"Ingested data not found at '{ingested_path}'. "
-            "Run `uv run python3 ingest.py` before launching main.py."
+            f"ingested data not found at '{ingested_path}'. "
+            "run `uv run python3 ingest.py` before launching main.py."
         )
+        logger.error(msg)
         raise FileNotFoundError(msg)
 
     run_preprocess_cluster_stage(configuration)
@@ -216,6 +225,8 @@ def main() -> None:
     state_path = state.build_state_path(configuration)
     configuration_snapshot = state.configuration_settings_snapshot(configuration)
     io.save_state(state_path, configuration_snapshot)
+    logger.info("pipeline complete")
+    clear_active_log(configuration.logs_directory)
 
 
 if __name__ == "__main__":

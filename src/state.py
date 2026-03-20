@@ -4,12 +4,17 @@ from pathlib import Path
 from typing import Any
 
 from .config import Configuration
+from .logging_utils import get_logger
+
+logger = get_logger(__name__)
 
 
 def build_state_path(configuration: Configuration) -> Path:
     """Return the path for provenance state output."""
 
-    return configuration.results_directory / "state.json"
+    path = configuration.results_directory / "state.json"
+    logger.debug("resolved state path to %s", path)
+    return path
 
 
 def configuration_settings_snapshot(configuration: Configuration) -> dict[str, Any]:
@@ -17,9 +22,10 @@ def configuration_settings_snapshot(configuration: Configuration) -> dict[str, A
 
     pipeline = configuration.pipeline
     plots = configuration.plots
-    return {
+    snapshot = {
         "raw_data_directory": str(configuration.raw_data_directory),
         "output_directory": str(configuration.output_directory),
+        "logs_directory": str(configuration.logs_directory),
         "annotation_model": configuration.annotation_model,
         "pipeline": {
             "minimum_counts": pipeline.minimum_counts,
@@ -42,3 +48,5 @@ def configuration_settings_snapshot(configuration: Configuration) -> dict[str, A
             "genes_to_plot": list(plots.genes_to_plot),
         },
     }
+    logger.debug("built configuration snapshot for state persistence")
+    return snapshot

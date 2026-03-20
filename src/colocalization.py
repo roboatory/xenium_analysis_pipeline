@@ -5,6 +5,10 @@ import numpy as np
 import pandas as pd
 from scipy import sparse, stats
 
+from .logging_utils import get_logger
+
+logger = get_logger(__name__)
+
 FDR_ALPHA = 0.05
 RANDOM_SEED = 0
 
@@ -14,6 +18,7 @@ def compute_observed_contact_matrices(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Compute observed contact counts and row-normalized proportions."""
 
+    logger.debug("computing observed contact matrices")
     cell_types = annotated_data.obs["cell_type"].astype("category")
     categories = cell_types.cat.categories.astype(str)
     codes = cell_types.cat.codes.to_numpy()
@@ -35,6 +40,7 @@ def compute_observed_contact_matrices(
         out=np.zeros_like(counts, dtype=np.float64),
         where=totals > 0,
     )
+    logger.info("computed contact matrix for %s cell types", len(categories))
     return _frame(counts, categories), _frame(proportions, categories)
 
 
@@ -45,6 +51,11 @@ def compute_permutation_significance(
 ) -> dict[str, pd.DataFrame]:
     """Compute permutation-based contact enrichment statistics."""
 
+    logger.debug(
+        "running colocalization permutation testing with number_of_permutations=%s and minimum_cells=%s",
+        number_of_permutations,
+        minimum_cells,
+    )
     cell_type_labels = annotated_data.obs["cell_type"].astype(str)
 
     type_counts = cell_type_labels.dropna().value_counts().sort_index()
@@ -54,6 +65,10 @@ def compute_permutation_significance(
     number_of_tested_types = len(tested_cell_types)
 
     if number_of_tested_types < 2:
+        logger.warning(
+            "skipping colocalization significance because only %s cell type(s) met the minimum cell count",
+            number_of_tested_types,
+        )
         nan_matrix = np.full((number_of_tested_types, number_of_tested_types), np.nan)
         return {
             "log2_fold_enrichment": _frame(nan_matrix, tested_cell_types),
@@ -134,10 +149,15 @@ def compute_permutation_significance(
         selection_mask
     )
 
-    return {
+    results = {
         "log2_fold_enrichment": _frame(log2_fold_enrichment, tested_cell_types),
         "significant_mask": _frame(significant_mask, tested_cell_types),
     }
+    logger.info(
+        "colocalization tested %s cell types",
+        number_of_tested_types,
+    )
+    return results
 
 
 def _undirected_edges(

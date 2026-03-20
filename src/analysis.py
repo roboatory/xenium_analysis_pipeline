@@ -4,6 +4,10 @@ from anndata import AnnData
 import pandas as pd
 import scanpy as sc
 
+from .logging_utils import get_logger
+
+logger = get_logger(__name__)
+
 
 def run_clustering(
     annotated_data: AnnData,
@@ -11,12 +15,17 @@ def run_clustering(
 ) -> None:
     """Run clustering on the annotated data."""
 
+    logger.debug("running PCA/neighbors/leiden with %s components", pca_n_components)
     sc.pp.pca(annotated_data, n_comps=pca_n_components)
     sc.pp.neighbors(annotated_data, metric="cosine")
     sc.tl.leiden(
         annotated_data,
         resolution=0.5,
         flavor="igraph",
+    )
+    logger.info(
+        "found %s leiden clusters",
+        annotated_data.obs["leiden"].nunique(),
     )
 
 
@@ -25,7 +34,9 @@ def run_umap(
 ) -> None:
     """Run UMAP on the annotated data."""
 
+    logger.debug("running UMAP embedding")
     sc.tl.umap(annotated_data)
+    logger.debug("UMAP embedding complete")
 
 
 def rank_genes(
@@ -33,12 +44,14 @@ def rank_genes(
 ) -> None:
     """Rank genes on the annotated data."""
 
+    logger.debug("ranking marker genes by leiden cluster")
     sc.tl.rank_genes_groups(
         annotated_data,
         groupby="leiden",
         layer="log_normalized",
         pts=True,
     )
+    logger.debug("gene ranking complete")
 
 
 def compute_enriched_genes(
@@ -49,6 +62,12 @@ def compute_enriched_genes(
 ) -> dict[str, list[str]]:
     """Compute enriched genes on the annotated data."""
 
+    logger.debug(
+        "collecting enriched genes with top_n=%s, minimum_logarithm_fold_change=%s, maximum_adjusted_p_value=%s",
+        top_n,
+        minimum_logarithm_fold_change,
+        maximum_adjusted_p_value,
+    )
     gene_lists_by_cluster: dict[str, list[str]] = {}
 
     for cluster in pd.unique(annotated_data.obs["leiden"]):
@@ -68,4 +87,5 @@ def compute_enriched_genes(
 
         gene_lists_by_cluster[str(cluster)] = genes
 
+    logger.info("computed marker lists for %s clusters", len(gene_lists_by_cluster))
     return gene_lists_by_cluster
