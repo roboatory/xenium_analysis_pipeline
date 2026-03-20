@@ -102,7 +102,12 @@ def compute_permutation_significance(
     )
 
     expected_contacts = np.zeros((number_of_tested_types, number_of_tested_types))
-    exceed_count = np.zeros((number_of_tested_types, number_of_tested_types), int)
+    enrich_exceed_count = np.zeros(
+        (number_of_tested_types, number_of_tested_types), int
+    )
+    deplete_exceed_count = np.zeros(
+        (number_of_tested_types, number_of_tested_types), int
+    )
 
     random_generator = np.random.default_rng(RANDOM_SEED)
 
@@ -114,11 +119,17 @@ def compute_permutation_significance(
             number_of_tested_types,
         )
         expected_contacts += permuted_contacts
-        exceed_count += permuted_contacts >= observed_contacts
+        enrich_exceed_count += permuted_contacts >= observed_contacts
+        deplete_exceed_count += permuted_contacts <= observed_contacts
 
     expected_contacts /= number_of_permutations
 
-    empirical_p_values = (exceed_count + 1) / (number_of_permutations + 1)
+    empirical_p_values_enrichment = (enrich_exceed_count + 1) / (
+        number_of_permutations + 1
+    )
+    empirical_p_values_depletion = (deplete_exceed_count + 1) / (
+        number_of_permutations + 1
+    )
 
     fold_enrichment = np.divide(
         observed_contacts,
@@ -134,15 +145,26 @@ def compute_permutation_significance(
     )
 
     upper_triangle_indices = np.triu_indices(number_of_tested_types, k=1)
-    fdr_values = _benjamini_hochberg(empirical_p_values[upper_triangle_indices])
+    enrichment_fdr_values = _benjamini_hochberg(
+        empirical_p_values_enrichment[upper_triangle_indices]
+    )
+    depletion_fdr_values = _benjamini_hochberg(
+        empirical_p_values_depletion[upper_triangle_indices]
+    )
 
     significant_mask = np.zeros((number_of_tested_types, number_of_tested_types), bool)
 
-    selection_mask = (
-        (fdr_values <= FDR_ALPHA)
+    enrichment_selection_mask = (
+        (enrichment_fdr_values <= FDR_ALPHA)
         & np.isfinite(fold_enrichment[upper_triangle_indices])
         & (fold_enrichment[upper_triangle_indices] > 1)
     )
+    depletion_selection_mask = (
+        (depletion_fdr_values <= FDR_ALPHA)
+        & np.isfinite(fold_enrichment[upper_triangle_indices])
+        & (fold_enrichment[upper_triangle_indices] < 1)
+    )
+    selection_mask = enrichment_selection_mask | depletion_selection_mask
 
     significant_mask[upper_triangle_indices] = selection_mask
     significant_mask[(upper_triangle_indices[1], upper_triangle_indices[0])] = (
@@ -154,8 +176,10 @@ def compute_permutation_significance(
         "significant_mask": _frame(significant_mask, tested_cell_types),
     }
     logger.info(
-        "colocalization tested %s cell types",
+        "colocalization tested %s cell types with %s enriched and %s depleted significant pairs",
         number_of_tested_types,
+        int(enrichment_selection_mask.sum()),
+        int(depletion_selection_mask.sum()),
     )
     return results
 
