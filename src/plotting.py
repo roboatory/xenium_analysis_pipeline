@@ -2,6 +2,9 @@ from __future__ import annotations
 
 
 import matplotlib
+
+matplotlib.use("agg")
+
 import matplotlib.pyplot as plt
 import numpy as np
 import scanpy as sc
@@ -18,6 +21,8 @@ from .logging_utils import get_logger
 
 logger = get_logger(__name__)
 
+FIGURE_DPI = 300
+
 
 def plot_cell_and_nucleus_boundaries(
     configuration: Configuration,
@@ -31,7 +36,7 @@ def plot_cell_and_nucleus_boundaries(
     _show = plt.show
     plt.show = lambda: None
     try:
-        _dpi = 600
+        _dpi = FIGURE_DPI
         fig, ax = plt.subplots(figsize=(14, 14), dpi=_dpi)
 
         (
@@ -77,7 +82,7 @@ def plot_transcripts(
     _show = plt.show
     plt.show = lambda: None
     try:
-        _dpi = 600
+        _dpi = FIGURE_DPI
         fig, ax = plt.subplots(figsize=(14, 14), dpi=_dpi)
 
         (
@@ -118,7 +123,7 @@ def plot_qc_histogram(
     _show = plt.show
     plt.show = lambda: None
     try:
-        _dpi = 600
+        _dpi = FIGURE_DPI
         figure, ax = plt.subplots(figsize=(10, 5), dpi=_dpi)
         ax.hist(annotated_data.obs["total_counts"], bins=100, color="black", alpha=0.8)
         ax.set_xlabel("transcripts per cell")
@@ -159,7 +164,7 @@ def plot_umap_leiden(
     _show = plt.show
     plt.show = lambda: None
     try:
-        _dpi = 600
+        _dpi = FIGURE_DPI
         umap_figure = sc.pl.umap(
             annotated_data,
             color="cell_type",
@@ -192,7 +197,7 @@ def plot_cluster_overlay(
     _show = plt.show
     plt.show = lambda: None
     try:
-        _dpi = 600
+        _dpi = FIGURE_DPI
         fig, ax = plt.subplots(figsize=(14, 14), dpi=_dpi)
         n_clusters = max(gdf[cluster_key].nunique(), 1)
         cmap = matplotlib.colormaps["Set3"].resampled(n_clusters)
@@ -233,7 +238,7 @@ def plot_rank_genes_dotplot(
     _show = plt.show
     plt.show = lambda: None
     try:
-        _dpi = 600
+        _dpi = FIGURE_DPI
         dotplot = sc.pl.rank_genes_groups_dotplot(
             annotated_data,
             n_genes=n_genes,
@@ -263,7 +268,7 @@ def plot_colocalization_contact_counts(
     _show = plt.show
     plt.show = lambda: None
     try:
-        _dpi = 600
+        _dpi = FIGURE_DPI
         fig, ax = plt.subplots(figsize=(12, 10), dpi=_dpi)
         image = ax.imshow(np.log1p(counts.to_numpy()), cmap="magma")
         ax.set_xticks(np.arange(counts.shape[1]))
@@ -299,7 +304,7 @@ def plot_colocalization_contact_row_proportions(
     _show = plt.show
     plt.show = lambda: None
     try:
-        _dpi = 600
+        _dpi = FIGURE_DPI
         fig, ax = plt.subplots(figsize=(12, 10), dpi=_dpi)
         image = ax.imshow(proportions.to_numpy(), cmap="viridis", vmin=0.0, vmax=1.0)
         ax.set_xticks(np.arange(proportions.shape[1]))
@@ -335,7 +340,7 @@ def plot_colocalization_log2_fold_enrichment(
     _show = plt.show
     plt.show = lambda: None
     try:
-        _dpi = 600
+        _dpi = FIGURE_DPI
         figure, axis = plt.subplots(figsize=(12, 10), dpi=_dpi)
         _render_log2_enrichment_heatmap(
             axis, log2_fold_enrichment, title="first-degree contact enrichment"
@@ -365,7 +370,7 @@ def plot_colocalization_log2_fold_enrichment_significant_only(
     _show = plt.show
     plt.show = lambda: None
     try:
-        _dpi = 600
+        _dpi = FIGURE_DPI
         figure, axis = plt.subplots(figsize=(12, 10), dpi=_dpi)
         _render_log2_enrichment_heatmap(
             axis,

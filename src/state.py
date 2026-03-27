@@ -27,6 +27,7 @@ def configuration_settings_snapshot(configuration: Configuration) -> dict[str, A
         "output_directory": str(configuration.output_directory),
         "logs_directory": str(configuration.logs_directory),
         "annotation_model": configuration.annotation_model,
+        "condition": configuration.condition,
         "pipeline": {
             "minimum_counts": pipeline.minimum_counts,
             "maximum_counts_quantile": pipeline.maximum_counts_quantile,

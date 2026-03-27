@@ -98,6 +98,7 @@ def run_annotation_stage(configuration: Configuration) -> None:
     cluster_annotations = annotation.annotate_clusters_with_llm(
         enriched_gene_lists,
         configuration.annotation_model,
+        configuration.condition,
         "marker_genes",
     )
     io.write_annotations(configuration, cluster_annotations, "cluster")
@@ -144,6 +145,7 @@ def run_neighborhood_stage(configuration: Configuration) -> None:
     domain_annotations = annotation.annotate_clusters_with_llm(
         domain_signatures,
         configuration.annotation_model,
+        configuration.condition,
         "neighborhood_cell_types",
     )
 

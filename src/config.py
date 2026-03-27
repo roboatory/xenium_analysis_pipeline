@@ -105,6 +105,7 @@ class Configuration:
     figures_directory: Path | None = None
     logs_directory: Path | None = None
     annotation_model: str = "llama3.1:8b"
+    condition: str = "prostate cancer"
     pipeline: PipelineConfiguration | None = None
     plots: PlotsConfiguration | None = None
 
@@ -129,6 +130,7 @@ class Configuration:
         self.annotation_model = str(
             configuration.get("annotation_model", self.annotation_model)
         )
+        self.condition = str(configuration.get("condition", self.condition))
         self.pipeline = PipelineConfiguration.from_dictionary(configuration["pipeline"])
         self.plots = PlotsConfiguration.from_dictionary(configuration["plots"])
         logger.debug(
