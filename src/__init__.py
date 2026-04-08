@@ -1,6 +1,6 @@
 """Shared package exports for the prostate cancer pipeline."""
 
-from .logging_utils import (
+from .logging import (
     current_log_path,
     get_logger,
     initialize_logging,

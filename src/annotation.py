@@ -5,7 +5,7 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from .logging_utils import get_logger
+from .logging import get_logger
 
 logger = get_logger(__name__)
 

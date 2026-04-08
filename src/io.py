@@ -10,7 +10,7 @@ from uuid import uuid4
 from spatialdata import SpatialData, read_zarr
 
 from .config import Configuration
-from .logging_utils import get_logger
+from .logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -118,7 +118,10 @@ def write_labels(
     logger.debug("wrote %s labels to %s", target, output_path)
 
 
-def save_state(path: Path, state_payload: dict[str, Any]) -> None:
+def save_state(
+    path: Path,
+    state_payload: dict[str, Any],
+) -> None:
     """Write run configuration snapshot JSON."""
 
     with path.open("w", encoding="utf-8") as file_handle:

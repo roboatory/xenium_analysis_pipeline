@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from scipy import sparse, stats
 
-from .logging_utils import get_logger
+from .logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -221,7 +221,10 @@ def _benjamini_hochberg(p_values: np.ndarray) -> np.ndarray:
     )
 
 
-def _frame(values: np.ndarray, labels: list[str]) -> pd.DataFrame:
+def _frame(
+    values: np.ndarray,
+    labels: list[str],
+) -> pd.DataFrame:
     """Wrap a matrix in a labeled dataframe."""
 
     index = pd.Index(labels, name="cell_type")

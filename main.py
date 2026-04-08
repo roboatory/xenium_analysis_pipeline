@@ -14,7 +14,7 @@ from src import (
     state,
 )
 from src.config import Configuration
-from src.logging_utils import clear_active_log, get_logger, initialize_logging
+from src.logging import clear_active_log, get_logger, initialize_logging
 
 CONFIG_PATH = Path("config.yaml").resolve()
 logger = get_logger(__name__)

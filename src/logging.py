@@ -30,7 +30,10 @@ def _active_log_path(logs_directory: Path) -> Path:
     return logs_directory / _ACTIVE_LOG_FILENAME
 
 
-def _resolve_log_path(logs_directory: Path, reset: bool) -> Path:
+def _resolve_log_path(
+    logs_directory: Path,
+    reset: bool,
+) -> Path:
     """Pick the log file for this process, reusing the active run when needed."""
 
     active_log_path = _active_log_path(logs_directory)
@@ -62,7 +65,10 @@ def _log_unhandled_exception(
     )
 
 
-def initialize_logging(logs_directory: Path, reset: bool = False) -> Path:
+def initialize_logging(
+    logs_directory: Path,
+    reset: bool = False,
+) -> Path:
     """Configure centralized run-scoped logging once per process."""
 
     global _LOG_PATH
@@ -106,19 +112,28 @@ def get_logger(name: str | None = None) -> logging.Logger:
     return logging.getLogger(name if name is not None else "pipeline")
 
 
-def log_stdout(message: str, *args: object) -> None:
+def log_stdout(
+    message: str,
+    *args: object,
+) -> None:
     """Write an informational message."""
 
     get_logger("pipeline.stdout").info(message, *args)
 
 
-def log_warning(message: str, *args: object) -> None:
+def log_warning(
+    message: str,
+    *args: object,
+) -> None:
     """Write a warning message."""
 
     get_logger("pipeline.warning").warning(message, *args)
 
 
-def log_error(message: str, *args: object) -> None:
+def log_error(
+    message: str,
+    *args: object,
+) -> None:
     """Write an error message."""
 
     get_logger("pipeline.error").error(message, *args)

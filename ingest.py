@@ -5,7 +5,7 @@ from pathlib import Path
 from spatialdata_io import xenium
 from src import io
 from src.config import Configuration
-from src.logging_utils import get_logger, initialize_logging
+from src.logging import get_logger, initialize_logging
 
 CONFIG_PATH = Path("config.yaml").resolve()
 logger = get_logger(__name__)

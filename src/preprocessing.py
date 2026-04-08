@@ -4,7 +4,7 @@ import numpy as np
 import scanpy as sc
 from anndata import AnnData
 
-from .logging_utils import get_logger
+from .logging import get_logger
 
 logger = get_logger(__name__)
 

@@ -1,18 +1,13 @@
-# Python-generated files
 __pycache__/
-*.py[oc]
-build/
+*.py[cod]
+*.so
+.Python
+.venv/
 dist/
-wheels/
-*.egg-info
-
-# Virtual environments
-.venv
-
-# Apple files
-*.DS_Store
-
-# Project files
-plans/
-coprogression/coprogression.tar.gz
-coprogression/documentation.html
+build/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.env
+.env.*
+.DS_Store

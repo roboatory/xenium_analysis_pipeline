@@ -17,7 +17,7 @@ import spatialdata_plot  # noqa: F401
 from anndata import AnnData
 import pandas as pd
 
-from .logging_utils import get_logger
+from .logging import get_logger
 
 logger = get_logger(__name__)
 
