@@ -21,6 +21,19 @@ from .logging import get_logger
 logger = get_logger(__name__)
 
 FIGURE_DPI = 300
+_TAB20 = [matplotlib.colors.rgb2hex(c) for c in matplotlib.colormaps["tab20"].colors]
+
+
+def _build_categorical_palette(n_categories: int) -> list[str]:
+    """Return a list of n hex colors, using tab20 and extending with HSL if needed."""
+
+    if n_categories <= len(_TAB20):
+        return _TAB20[:n_categories]
+    extra = [
+        matplotlib.colors.hsv_to_rgb((i / n_categories, 0.65, 0.85))
+        for i in range(n_categories)
+    ]
+    return [matplotlib.colors.rgb2hex(c) for c in extra]
 
 
 @contextmanager
@@ -158,9 +171,12 @@ def plot_umap_leiden(
     logger.debug("rendering UMAP plot to %s", out_path)
 
     with _suppress_show():
+        n_types = annotated_data.obs["cell_type"].nunique()
+        palette = _build_categorical_palette(n_types)
         umap_figure = sc.pl.umap(
             annotated_data,
             color="cell_type",
+            palette=palette,
             show=False,
             return_fig=True,
         )
@@ -188,7 +204,8 @@ def plot_cluster_overlay(
     with _suppress_show():
         fig, ax = plt.subplots(figsize=(14, 14), dpi=FIGURE_DPI)
         n_clusters = max(gdf[cluster_key].nunique(), 1)
-        cmap = matplotlib.colormaps["Set3"].resampled(n_clusters)
+        palette = _build_categorical_palette(n_clusters)
+        cmap = matplotlib.colors.ListedColormap(palette)
         gdf.plot(
             column=cluster_key,
             ax=ax,

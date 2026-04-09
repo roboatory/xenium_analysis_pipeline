@@ -17,6 +17,7 @@ def annotate_clusters_with_llm(
     evidence_type: str,
     host: str = "http://localhost:11434",
     temperature: float = 0.0,
+    seed: int = 42,
     timeout_seconds: int = 120,
 ) -> dict[str, dict[str, Any]]:
     """Annotate clusters using a local Ollama-compatible LLM."""
@@ -76,7 +77,10 @@ def annotate_clusters_with_llm(
             ],
             "format": _annotation_schema(),
             "stream": False,
-            "temperature": temperature,
+            "options": {
+                "temperature": temperature,
+                "seed": seed,
+            },
         },
         host,
         timeout_seconds,

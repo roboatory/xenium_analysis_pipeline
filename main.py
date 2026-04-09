@@ -21,7 +21,13 @@ from src.logging import clear_active_log, get_logger, initialize_logging
 CONFIG_PATH = Path("config.yaml").resolve()
 logger = get_logger(__name__)
 
-STAGE_ORDER = ("ingest", "preprocess", "annotate", "domains", "colocalization")
+STAGE_ORDER = (
+    "ingest",
+    "preprocess",
+    "annotate",
+    "domains",
+    "colocalization",
+)
 
 
 def parse_arguments() -> list[str]:
