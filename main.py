@@ -33,16 +33,11 @@ STAGE_ORDER = (
 def parse_arguments() -> list[str]:
     """Parse CLI arguments and return the selected stages in pipeline order."""
 
-    parser = argparse.ArgumentParser(
-        description="Xenium spatial transcriptomics pipeline"
-    )
-    parser.add_argument(
-        "--stage",
-        nargs="+",
-        choices=STAGE_ORDER,
-        default=None,
-        help="one or more pipeline stages to run (default: all)",
-    )
+    # fmt: off
+    parser = argparse.ArgumentParser(description="Xenium spatial transcriptomics pipeline")
+    parser.add_argument("--stage", nargs="+", choices=STAGE_ORDER, default=None, help="one or more pipeline stages to run (default: all)")
+    # fmt: on
+
     args = parser.parse_args()
 
     if args.stage is None:

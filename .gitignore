@@ -11,3 +11,5 @@ build/
 .env
 .env.*
 .DS_Store
+
+notebooks/
