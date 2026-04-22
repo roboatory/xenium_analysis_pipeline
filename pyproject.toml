@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "harmonypy==0.0.10",
     "igraph>=1.0.0",
     "scanpy>=1.11,<1.12",
     "scikit-misc>=0.5.2",

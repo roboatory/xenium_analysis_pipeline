@@ -31,8 +31,6 @@ def configuration_settings_snapshot(configuration: Configuration) -> dict[str, A
         "logs_directory": str(configuration.logs_directory),
         "annotation_model": configuration.annotation_model,
         "pipeline": {
-            "minimum_counts": pipeline.minimum_counts,
-            "maximum_counts_quantile": pipeline.maximum_counts_quantile,
             "minimum_cells": pipeline.minimum_cells,
             "pca_n_components": pipeline.pca_n_components,
             "neighborhood_colocalization_radius": (

@@ -28,8 +28,6 @@ def multi_sample_configuration(tmp_path: Path) -> Configuration:
         figures_directory=tmp_path / "output" / "figures",
         logs_directory=tmp_path / "output" / "logs",
         pipeline=PipelineConfiguration(
-            minimum_counts=1,
-            maximum_counts_quantile=0.99,
             minimum_cells=1,
             pca_n_components=2,
             neighborhood_colocalization_radius=1.0,

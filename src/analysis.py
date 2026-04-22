@@ -3,6 +3,7 @@ from __future__ import annotations
 from anndata import AnnData
 import pandas as pd
 import scanpy as sc
+import scanpy.external as sce
 
 from .logging import get_logger
 
@@ -13,11 +14,34 @@ def run_clustering(
     annotated_data: AnnData,
     pca_n_components: int,
 ) -> None:
-    """Run clustering on the annotated data."""
+    """Run PCA, optional Harmony batch correction, neighbors, UMAP, and Leiden."""
 
-    logger.debug("running PCA/neighbors/leiden with %s components", pca_n_components)
+    logger.debug("running PCA with %s components", pca_n_components)
     sc.pp.pca(annotated_data, n_comps=pca_n_components)
-    sc.pp.neighbors(annotated_data, metric="cosine")
+
+    if (
+        "sample_id" in annotated_data.obs.columns
+        and annotated_data.obs["sample_id"].nunique() > 1
+    ):
+        logger.info(
+            "running multi-sample clustering with Harmony on %s samples",
+            annotated_data.obs["sample_id"].nunique(),
+        )
+        sc.pp.neighbors(annotated_data, use_rep="X_pca", metric="cosine")
+        sc.tl.umap(annotated_data)
+        annotated_data.obsm["X_umap_uncorrected"] = annotated_data.obsm["X_umap"].copy()
+
+        # `sample_id` is the only valid batch key here. Do not add biologically
+        # meaningful groupings (e.g. `condition`) — Harmony scrubs variance on its
+        # batch key, and scrubbing biological signal would defeat the analysis.
+        sce.pp.harmony_integrate(annotated_data, key="sample_id")
+
+        sc.pp.neighbors(annotated_data, use_rep="X_pca_harmony", metric="cosine")
+        sc.tl.umap(annotated_data)
+    else:
+        sc.pp.neighbors(annotated_data, use_rep="X_pca", metric="cosine")
+        sc.tl.umap(annotated_data)
+
     sc.tl.leiden(
         annotated_data,
         resolution=0.5,
@@ -27,16 +51,6 @@ def run_clustering(
         "found %s leiden clusters",
         annotated_data.obs["leiden"].nunique(),
     )
-
-
-def run_umap(
-    annotated_data: AnnData,
-) -> None:
-    """Run UMAP on the annotated data."""
-
-    logger.debug("running UMAP embedding")
-    sc.tl.umap(annotated_data)
-    logger.debug("UMAP embedding complete")
 
 
 def rank_genes(
