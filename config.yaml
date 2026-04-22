@@ -17,6 +17,3 @@ pipeline:
   rank_top_n: 30
   minimum_logarithm_fold_change: 0.5
   maximum_adjusted_p_value: 0.05
-
-plots:
-  genes_to_plot: ["TUBB", "CDH1"]

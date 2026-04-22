@@ -7,7 +7,7 @@ import pytest
 from anndata import AnnData
 
 from src import io
-from src.config import Configuration, PipelineConfiguration, PlotsConfiguration, Sample
+from src.config import Configuration, PipelineConfiguration, Sample
 from src.ingest import run_ingest
 
 from .conftest import build_synthetic_adata
@@ -38,7 +38,6 @@ def multi_sample_configuration(tmp_path: Path) -> Configuration:
             minimum_logarithm_fold_change=0.0,
             maximum_adjusted_p_value=1.0,
         ),
-        plots=PlotsConfiguration(genes_to_plot=()),
     )
     configuration.create_directories()
     return configuration

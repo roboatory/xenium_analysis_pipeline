@@ -31,7 +31,7 @@ def test_plot_cluster_overlay_writes_per_sample_centroid_scatter(
         sample_id="sample_a",
     )
     _assert_nonempty_file(
-        configuration.figures_directory / "sample_a" / "xenium_cell_type_overlay.png"
+        configuration.figures_directory / "cell_type_overlays" / "sample_a.png"
     )
 
 
@@ -50,9 +50,7 @@ def test_plot_cluster_overlay_filters_to_requested_sample(
         sample_id="missing_sample",
     )
     assert not (
-        configuration.figures_directory
-        / "missing_sample"
-        / "xenium_cell_type_overlay.png"
+        configuration.figures_directory / "cell_type_overlays" / "missing_sample.png"
     ).exists()
 
 
@@ -237,9 +235,11 @@ def test_plot_colocalization_heatmaps_write_figures(
     )
 
     for filename in (
-        "xenium_colocalization_contact_counts.png",
-        "xenium_colocalization_contact_row_proportions.png",
-        "xenium_colocalization_log2_fold_enrichment.png",
-        "xenium_colocalization_log2_fold_enrichment_significant_only.png",
+        "contact_counts.png",
+        "contact_row_proportions.png",
+        "log2_fold_enrichment.png",
+        "log2_fold_enrichment_significant_only.png",
     ):
-        _assert_nonempty_file(configuration.figures_directory / filename)
+        _assert_nonempty_file(
+            configuration.figures_directory / "colocalizations" / filename
+        )

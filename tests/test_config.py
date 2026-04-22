@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from src.config import Configuration, PipelineConfiguration, PlotsConfiguration, Sample
+from src.config import Configuration, PipelineConfiguration, Sample
 
 
 def _base_config_dict(raw: Path, output: Path) -> dict:
@@ -24,7 +24,6 @@ def _base_config_dict(raw: Path, output: Path) -> dict:
             "minimum_logarithm_fold_change": 0.5,
             "maximum_adjusted_p_value": 0.05,
         },
-        "plots": {"genes_to_plot": ["geneB", "geneA"]},
     }
 
 
@@ -60,19 +59,6 @@ def test_load_from_yaml_populates_all_fields(tmp_path: Path) -> None:
     assert configuration.logs_directory == (tmp_path / "output").resolve() / "logs"
     assert isinstance(configuration.pipeline, PipelineConfiguration)
     assert configuration.pipeline.pca_n_components == 20
-    assert isinstance(configuration.plots, PlotsConfiguration)
-
-
-def test_plots_genes_are_sorted(tmp_path: Path) -> None:
-    """PlotsConfiguration sorts genes_to_plot into deterministic order."""
-
-    config_path = _write_config(
-        tmp_path, _base_config_dict(tmp_path / "raw", tmp_path / "output")
-    )
-    configuration = Configuration()
-    configuration.load_from_yaml(config_path)
-
-    assert configuration.plots.genes_to_plot == ("geneA", "geneB")
 
 
 def test_defaults_used_when_optional_keys_omitted(tmp_path: Path) -> None:

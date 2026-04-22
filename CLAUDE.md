@@ -125,7 +125,7 @@ The annotation stages require a running Ollama server (`ollama serve`) with mode
 ## Configuration
 
 All pipeline parameters live in `config.yaml` at the repo root. Key sections:
-- `data_directory` / `output_directory` — input/output paths
+- `samples` — list of `{id, path}` records pointing at raw Xenium output directories
+- `output_directory` — root for `processed/`, `figures/`, `analysis/`, `logs/`
 - `annotation_model` — LLM model name
 - `pipeline` — numeric parameters (min counts, PCA components, colocalization radius, permutation count, clustering params, significance thresholds)
-- `plots.genes_to_plot` — genes for transcript visualization

@@ -8,7 +8,7 @@ import pytest
 from anndata import AnnData
 
 import main
-from src.config import Configuration, PipelineConfiguration, PlotsConfiguration, Sample
+from src.config import Configuration, PipelineConfiguration, Sample
 
 from .conftest import build_synthetic_adata
 
@@ -38,7 +38,6 @@ def two_sample_configuration(tmp_path: Path) -> Configuration:
             minimum_logarithm_fold_change=-1e9,
             maximum_adjusted_p_value=1.0,
         ),
-        plots=PlotsConfiguration(genes_to_plot=()),
     )
     configuration.create_directories()
     return configuration
@@ -142,18 +141,16 @@ def test_pipeline_runs_end_to_end_on_two_samples(
     assert (figures / "umap_leiden.png").exists()
     assert (figures / "rank_genes_dotplot_top_5.png").exists()
     for filename in (
-        "xenium_colocalization_contact_counts.png",
-        "xenium_colocalization_contact_row_proportions.png",
-        "xenium_colocalization_log2_fold_enrichment.png",
-        "xenium_colocalization_log2_fold_enrichment_significant_only.png",
+        "contact_counts.png",
+        "contact_row_proportions.png",
+        "log2_fold_enrichment.png",
+        "log2_fold_enrichment_significant_only.png",
     ):
-        assert (figures / filename).exists(), f"missing {filename}"
+        assert (figures / "colocalizations" / filename).exists(), f"missing {filename}"
 
     for sample_id in ("patient_001", "patient_002"):
-        assert (figures / sample_id / "xenium_cell_type_overlay.png").exists()
-        assert (
-            figures / sample_id / "xenium_spatial_domain_label_overlay.png"
-        ).exists()
+        assert (figures / "cell_type_overlays" / f"{sample_id}.png").exists()
+        assert (figures / "spatial_domain_overlays" / f"{sample_id}.png").exists()
         assert (results / sample_id / "leiden_clusters.csv").exists()
         assert (results / sample_id / "spatial_domain_labels.csv").exists()
 

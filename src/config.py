@@ -69,24 +69,6 @@ class PipelineConfiguration:
         )
 
 
-@dataclass(frozen=True)
-class PlotsConfiguration:
-    """Configuration for plotting behaviour."""
-
-    genes_to_plot: tuple[str, ...] = ()
-
-    @classmethod
-    def from_dictionary(
-        cls: type[PlotsConfiguration],
-        data: dict[str, Any],
-    ) -> PlotsConfiguration:
-        """Create from a raw dictionary (typically loaded from YAML)."""
-
-        return cls(
-            genes_to_plot=tuple(sorted(data["genes_to_plot"])),
-        )
-
-
 @dataclass
 class Configuration:
     """Top-level configuration loaded from YAML."""
@@ -99,7 +81,6 @@ class Configuration:
     logs_directory: Path | None = None
     annotation_model: str = "llama3.1:8b"
     pipeline: PipelineConfiguration | None = None
-    plots: PlotsConfiguration | None = None
 
     def load_from_yaml(
         self,
@@ -124,7 +105,6 @@ class Configuration:
             Sample.from_dictionary(record) for record in configuration["samples"]
         ]
         self.pipeline = PipelineConfiguration.from_dictionary(configuration["pipeline"])
-        self.plots = PlotsConfiguration.from_dictionary(configuration["plots"])
         logger.debug(
             "loaded configuration from %s with %s sample(s) and output root %s",
             configuration_path,
@@ -145,7 +125,6 @@ class Configuration:
                 path.mkdir(parents=True, exist_ok=True)
                 logger.debug("ensured output directory exists: %s", path)
 
-        for sample in self.samples:
-            for parent in (self.figures_directory, self.results_directory):
-                if parent is not None:
-                    (parent / sample.id).mkdir(parents=True, exist_ok=True)
+        if self.results_directory is not None:
+            for sample in self.samples:
+                (self.results_directory / sample.id).mkdir(parents=True, exist_ok=True)

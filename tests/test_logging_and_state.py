@@ -76,7 +76,6 @@ def test_configuration_settings_snapshot_round_trips_key_values(
     assert snapshot["pipeline"]["colocalization_number_of_permutations"] == (
         configuration.pipeline.colocalization_number_of_permutations
     )
-    assert snapshot["plots"]["genes_to_plot"] == list(configuration.plots.genes_to_plot)
 
 
 def test_configuration_settings_snapshot_includes_samples(

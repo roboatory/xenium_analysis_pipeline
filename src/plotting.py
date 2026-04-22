@@ -21,6 +21,12 @@ logger = get_logger(__name__)
 FIGURE_DPI = 300
 _TAB20 = [matplotlib.colors.rgb2hex(c) for c in matplotlib.colormaps["tab20"].colors]
 
+_OVERLAY_FOLDERS = {
+    "cell_type": "cell_type_overlays",
+    "spatial_domain_label": "spatial_domain_overlays",
+}
+_COLOCALIZATION_FOLDER = "colocalizations"
+
 
 def _build_categorical_palette(n_categories: int) -> list[str]:
     """Return a list of n hex colors, using tab20 and extending with HSL if needed."""
@@ -171,16 +177,15 @@ def plot_cluster_overlay(
         )
         return
 
-    if sample_id is not None:
-        out_dir = configuration.figures_directory / sample_id
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / f"xenium_{cluster_key}_overlay.png"
-    else:
-        out_path = configuration.figures_directory / f"xenium_{cluster_key}_overlay.png"
+    folder_name = _OVERLAY_FOLDERS.get(cluster_key, f"{cluster_key}_overlays")
+    out_dir = configuration.figures_directory / folder_name
+    out_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{sample_id}.png" if sample_id is not None else "composite.png"
+    out_path = out_dir / filename
     logger.debug("rendering overlay for %s to %s", cluster_key, out_path)
 
     with _suppress_show():
-        fig, ax = plt.subplots(figsize=(14, 14), dpi=FIGURE_DPI)
+        fig, ax = plt.subplots(figsize=(18, 18), dpi=FIGURE_DPI)
         for category in all_categories:
             in_category = (cluster_values == category).to_numpy()
             if not in_category.any():
@@ -188,7 +193,7 @@ def plot_cluster_overlay(
             ax.scatter(
                 coordinates[in_category, 0],
                 coordinates[in_category, 1],
-                s=4,
+                s=1.5,
                 color=color_map[category],
                 label=str(category),
                 alpha=0.85,
@@ -196,18 +201,16 @@ def plot_cluster_overlay(
             )
         ax.set_aspect("equal")
         ax.invert_yaxis()
-        ax.set_xlabel("x")
-        ax.set_ylabel("y")
-        ax.set_title(f"{cluster_key}{' — ' + sample_id if sample_id else ''}")
+        ax.set_axis_off()
         ax.legend(
             loc="center left",
-            bbox_to_anchor=(1.02, 0.5),
-            fontsize=9,
-            markerscale=2,
+            bbox_to_anchor=(1.01, 0.5),
+            fontsize=11,
+            markerscale=8,
             title=cluster_key,
+            frameon=False,
         )
-        fig.tight_layout()
-        fig.savefig(out_path, bbox_inches="tight", dpi=FIGURE_DPI)
+        fig.savefig(out_path, bbox_inches="tight", dpi=FIGURE_DPI, pad_inches=0.1)
         plt.close(fig)
         logger.debug("saved figure %s", out_path)
 
@@ -239,20 +242,20 @@ def plot_harmony_diagnostic(
             annotated_data.obsm["X_umap_uncorrected"],
             sample_categories,
             palette,
-            title="before Harmony",
+            title="before harmony",
         )
         _scatter_umap(
             axes[1],
             annotated_data.obsm["X_umap"],
             sample_categories,
             palette,
-            title="after Harmony",
+            title="after harmony",
         )
         axes[1].legend(
             bbox_to_anchor=(1.02, 1),
             loc="upper left",
             fontsize=9,
-            markerscale=2,
+            markerscale=5,
             title="sample_id",
         )
 
@@ -322,9 +325,9 @@ def plot_colocalization_contact_counts(
 ) -> None:
     """Plot heatmap of observed cell-type contact counts."""
 
-    out_path = (
-        configuration.figures_directory / "xenium_colocalization_contact_counts.png"
-    )
+    out_dir = configuration.figures_directory / _COLOCALIZATION_FOLDER
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "contact_counts.png"
     logger.debug("rendering colocalization count heatmap to %s", out_path)
 
     with _suppress_show():
@@ -352,10 +355,9 @@ def plot_colocalization_contact_row_proportions(
 ) -> None:
     """Plot heatmap of row-normalized observed cell-type contact proportions."""
 
-    out_path = (
-        configuration.figures_directory
-        / "xenium_colocalization_contact_row_proportions.png"
-    )
+    out_dir = configuration.figures_directory / _COLOCALIZATION_FOLDER
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "contact_row_proportions.png"
     logger.debug("rendering row-normalized colocalization heatmap to %s", out_path)
 
     with _suppress_show():
@@ -383,10 +385,9 @@ def plot_colocalization_log2_fold_enrichment(
 ) -> None:
     """Plot heatmap of log2 fold enrichment from permutation testing."""
 
-    out_path = (
-        configuration.figures_directory
-        / "xenium_colocalization_log2_fold_enrichment.png"
-    )
+    out_dir = configuration.figures_directory / _COLOCALIZATION_FOLDER
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "log2_fold_enrichment.png"
     logger.debug("rendering log2 fold enrichment heatmap to %s", out_path)
 
     with _suppress_show():
@@ -407,10 +408,9 @@ def plot_colocalization_log2_fold_enrichment_significant_only(
 ) -> None:
     """Plot heatmap of log2 fold enrichment for significant pairs only."""
 
-    out_path = (
-        configuration.figures_directory
-        / "xenium_colocalization_log2_fold_enrichment_significant_only.png"
-    )
+    out_dir = configuration.figures_directory / _COLOCALIZATION_FOLDER
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "log2_fold_enrichment_significant_only.png"
     logger.debug("rendering significant-only enrichment heatmap to %s", out_path)
     significant_only = log2_fold_enrichment.where(significant_mask, np.nan)
 

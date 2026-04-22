@@ -21,7 +21,6 @@ def configuration_settings_snapshot(configuration: Configuration) -> dict[str, A
     """Build a serializable snapshot of config settings used for this run."""
 
     pipeline = configuration.pipeline
-    plots = configuration.plots
     snapshot = {
         "samples": [
             {"id": sample.id, "path": str(sample.path)}
@@ -44,9 +43,6 @@ def configuration_settings_snapshot(configuration: Configuration) -> dict[str, A
             "rank_top_n": pipeline.rank_top_n,
             "minimum_logarithm_fold_change": pipeline.minimum_logarithm_fold_change,
             "maximum_adjusted_p_value": pipeline.maximum_adjusted_p_value,
-        },
-        "plots": {
-            "genes_to_plot": list(plots.genes_to_plot),
         },
     }
     logger.debug("built configuration snapshot for state persistence")

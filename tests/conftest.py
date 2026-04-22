@@ -13,7 +13,6 @@ from src import logging as pipeline_logging
 from src.config import (
     Configuration,
     PipelineConfiguration,
-    PlotsConfiguration,
     Sample,
 )
 
@@ -57,7 +56,6 @@ def configuration(tmp_path: Path) -> Configuration:
             minimum_logarithm_fold_change=0.0,
             maximum_adjusted_p_value=1.0,
         ),
-        plots=PlotsConfiguration(genes_to_plot=("gene_0", "gene_1")),
     )
     config.create_directories()
     return config
