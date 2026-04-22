@@ -12,8 +12,6 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 from anndata import AnnData
-from spatialdata import SpatialData
-import spatialdata_plot  # noqa: F401
 
 from .config import Configuration
 from .logging import get_logger
@@ -46,76 +44,6 @@ def _suppress_show() -> Iterator[None]:
         yield
     finally:
         plt.show = original_show
-
-
-def plot_cell_and_nucleus_boundaries(
-    configuration: Configuration,
-    spatial_data: SpatialData,
-) -> None:
-    """Plot cell and nucleus boundaries."""
-
-    out_path = configuration.figures_directory / "xenium_cell_nucleus_boundaries.png"
-    logger.debug("rendering cell and nucleus boundary plot to %s", out_path)
-
-    with _suppress_show():
-        fig, ax = plt.subplots(figsize=(14, 14), dpi=FIGURE_DPI)
-
-        (
-            spatial_data.pl.render_shapes(
-                element="cell_boundaries",
-                fill_alpha=0.0,
-                outline_color="#2d2d2d",
-                outline_width=0.2,
-                outline_alpha=1.0,
-            )
-            .pl.render_shapes(
-                element="nucleus_boundaries",
-                fill_alpha=0.0,
-                outline_color="#e64b35",
-                outline_width=0.35,
-                outline_alpha=1.0,
-            )
-            .pl.show(ax=ax, title="", dpi=FIGURE_DPI)
-        )
-
-        ax.axis("off")
-        fig.savefig(out_path, bbox_inches="tight", dpi=FIGURE_DPI)
-        plt.close(fig)
-        logger.debug("saved figure %s", out_path)
-
-
-def plot_transcripts(
-    configuration: Configuration,
-    spatial_data: SpatialData,
-    genes: list[str],
-    palette: list[str],
-    max_points: int = 50_000,
-) -> None:
-    """Plot transcripts."""
-
-    out_path = (
-        configuration.figures_directory / f"xenium_transcripts_{'_'.join(genes)}.png"
-    )
-    logger.debug("rendering transcript plot for genes=%s to %s", genes, out_path)
-
-    with _suppress_show():
-        fig, ax = plt.subplots(figsize=(14, 14), dpi=FIGURE_DPI)
-
-        (
-            spatial_data.pl.render_points(
-                element="transcripts",
-                color="feature_name",
-                groups=genes,
-                size=2,
-                max_points=max_points,
-                palette=palette,
-            ).pl.show(ax=ax, title="", dpi=FIGURE_DPI, colorbar=False)
-        )
-
-        ax.axis("off")
-        fig.savefig(out_path, bbox_inches="tight", dpi=FIGURE_DPI)
-        plt.close(fig)
-        logger.debug("saved figure %s", out_path)
 
 
 def plot_qc_histogram(
@@ -162,12 +90,11 @@ def plot_qc_histogram(
 
 def plot_umap_leiden(
     configuration: Configuration,
-    spatial_data: SpatialData,
+    annotated_data: AnnData,
 ) -> None:
-    """Plot UMAP colored by Leiden clusters."""
+    """Plot the composite UMAP colored by cell_type."""
 
     out_path = configuration.figures_directory / "umap_leiden.png"
-    annotated_data = spatial_data["table"]
     logger.debug("rendering UMAP plot to %s", out_path)
 
     with _suppress_show():
@@ -187,45 +114,159 @@ def plot_umap_leiden(
 
 def plot_cluster_overlay(
     configuration: Configuration,
-    spatial_data: SpatialData,
-    cluster_key: str = "cell_type",
+    annotated_data: AnnData,
+    cluster_key: str,
+    sample_id: str | None = None,
 ) -> None:
-    """Plot cell shapes colored by cluster labels (e.g. Leiden)."""
+    """Plot a per-sample centroid scatter colored by the given cluster label column."""
 
-    out_path = configuration.figures_directory / f"xenium_{cluster_key}_overlay.png"
+    if sample_id is not None:
+        if "sample_id" not in annotated_data.obs.columns:
+            raise ValueError(
+                f"sample_id={sample_id!r} requested but adata has no 'sample_id' column"
+            )
+        sample_mask = (
+            annotated_data.obs["sample_id"].astype(str) == sample_id
+        ).to_numpy()
+        if not sample_mask.any():
+            logger.warning(
+                "no cells found for sample_id=%r; skipping overlay", sample_id
+            )
+            return
+        view = annotated_data[sample_mask]
+    else:
+        view = annotated_data
+
+    # Build the cluster->color map from the full dataset so the same cluster keeps
+    # the same color across every per-sample plot.
+    all_categories = (
+        annotated_data.obs[cluster_key].dropna().astype("category").cat.categories
+    )
+    palette = _build_categorical_palette(len(all_categories))
+    color_map = dict(zip(all_categories, palette))
+
+    valid_mask = view.obs[cluster_key].notna().to_numpy()
+    coordinates = np.asarray(view.obsm["spatial"])[valid_mask]
+    cluster_values = view.obs[cluster_key].dropna()
+    if coordinates.size == 0:
+        logger.debug(
+            "skipping overlay for %s/%s: no labeled cells", cluster_key, sample_id
+        )
+        return
+
+    suffix = f"_{sample_id}" if sample_id is not None else ""
+    out_path = (
+        configuration.figures_directory / f"xenium_{cluster_key}_overlay{suffix}.png"
+    )
     logger.debug("rendering overlay for %s to %s", cluster_key, out_path)
-    table = spatial_data.tables["table"]
-    gdf = spatial_data.shapes["cell_boundaries"].copy()
-
-    cell_to_cluster = table.obs.set_index("cell_id")[cluster_key]
-    gdf[cluster_key] = gdf.index.map(cell_to_cluster)
-    gdf = gdf.dropna(subset=[cluster_key])
 
     with _suppress_show():
         fig, ax = plt.subplots(figsize=(14, 14), dpi=FIGURE_DPI)
-        n_clusters = max(gdf[cluster_key].nunique(), 1)
-        palette = _build_categorical_palette(n_clusters)
-        cmap = matplotlib.colors.ListedColormap(palette)
-        gdf.plot(
-            column=cluster_key,
-            ax=ax,
-            categorical=True,
-            legend=True,
-            edgecolor="gray",
-            linewidth=0.15,
-            cmap=cmap,
-            legend_kwds={
-                "loc": "center left",
-                "bbox_to_anchor": (1, 0.5),
-                "fontsize": 9,
-            },
-        )
+        for category in all_categories:
+            in_category = (cluster_values == category).to_numpy()
+            if not in_category.any():
+                continue
+            ax.scatter(
+                coordinates[in_category, 0],
+                coordinates[in_category, 1],
+                s=4,
+                color=color_map[category],
+                label=str(category),
+                alpha=0.85,
+                linewidths=0,
+            )
         ax.set_aspect("equal")
-        ax.axis("off")
         ax.invert_yaxis()
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_title(f"{cluster_key}{' — ' + sample_id if sample_id else ''}")
+        ax.legend(
+            loc="center left",
+            bbox_to_anchor=(1.02, 0.5),
+            fontsize=9,
+            markerscale=2,
+            title=cluster_key,
+        )
+        fig.tight_layout()
         fig.savefig(out_path, bbox_inches="tight", dpi=FIGURE_DPI)
         plt.close(fig)
         logger.debug("saved figure %s", out_path)
+
+
+def plot_harmony_diagnostic(
+    configuration: Configuration,
+    annotated_data: AnnData,
+) -> None:
+    """Emit a side-by-side pre/post-Harmony UMAP colored by sample_id."""
+
+    if "X_umap_uncorrected" not in annotated_data.obsm:
+        logger.debug("skipping Harmony diagnostic: no uncorrected UMAP present")
+        return
+    if "sample_id" not in annotated_data.obs.columns:
+        logger.debug("skipping Harmony diagnostic: no sample_id column")
+        return
+
+    out_path = configuration.figures_directory / "harmony_umap_before_after.png"
+    logger.debug("rendering Harmony diagnostic to %s", out_path)
+
+    sample_categories = annotated_data.obs["sample_id"].astype("category")
+    palette = _build_categorical_palette(sample_categories.cat.categories.size)
+
+    with _suppress_show():
+        fig, axes = plt.subplots(1, 2, figsize=(16, 7), dpi=FIGURE_DPI)
+
+        _scatter_umap(
+            axes[0],
+            annotated_data.obsm["X_umap_uncorrected"],
+            sample_categories,
+            palette,
+            title="before Harmony",
+        )
+        _scatter_umap(
+            axes[1],
+            annotated_data.obsm["X_umap"],
+            sample_categories,
+            palette,
+            title="after Harmony",
+        )
+        axes[1].legend(
+            bbox_to_anchor=(1.02, 1),
+            loc="upper left",
+            fontsize=9,
+            markerscale=2,
+            title="sample_id",
+        )
+
+        fig.tight_layout()
+        fig.savefig(out_path, bbox_inches="tight", dpi=FIGURE_DPI)
+        plt.close(fig)
+        logger.debug("saved figure %s", out_path)
+
+
+def _scatter_umap(
+    axis: plt.Axes,
+    coordinates: np.ndarray,
+    categories: pd.Series,
+    palette: list[str],
+    title: str,
+) -> None:
+    """Scatter the given UMAP coordinates colored by the given categorical series."""
+
+    for color, category in zip(palette, categories.cat.categories):
+        mask = (categories == category).to_numpy()
+        axis.scatter(
+            coordinates[mask, 0],
+            coordinates[mask, 1],
+            s=3,
+            color=color,
+            label=str(category),
+            alpha=0.7,
+            linewidths=0,
+        )
+    axis.set_xlabel("UMAP 1")
+    axis.set_ylabel("UMAP 2")
+    axis.set_title(title)
+    axis.set_aspect("equal")
 
 
 def plot_rank_genes_dotplot(

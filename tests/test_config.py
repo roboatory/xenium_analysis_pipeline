@@ -14,8 +14,6 @@ def _base_config_dict(raw: Path, output: Path) -> dict:
         "output_directory": str(output),
         "annotation_model": "llama3.1:8b",
         "pipeline": {
-            "minimum_counts": 10,
-            "maximum_counts_quantile": 0.99,
             "minimum_cells": 5,
             "pca_n_components": 20,
             "neighborhood_colocalization_radius": 50.0,
@@ -141,8 +139,6 @@ def test_pipeline_configuration_casts_numeric_types() -> None:
     """PipelineConfiguration.from_dictionary coerces numeric strings to int/float."""
 
     raw = {
-        "minimum_counts": "100",
-        "maximum_counts_quantile": "0.99",
         "minimum_cells": "5",
         "pca_n_components": "20",
         "neighborhood_colocalization_radius": "50.0",
@@ -155,7 +151,7 @@ def test_pipeline_configuration_casts_numeric_types() -> None:
     }
     pipeline = PipelineConfiguration.from_dictionary(raw)
 
-    assert pipeline.minimum_counts == 100
-    assert pipeline.maximum_counts_quantile == pytest.approx(0.99)
+    assert pipeline.minimum_cells == 5
     assert pipeline.pca_n_components == 20
+    assert pipeline.neighborhood_colocalization_radius == pytest.approx(50.0)
     assert pipeline.colocalization_number_of_permutations == 200

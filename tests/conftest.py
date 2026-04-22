@@ -47,8 +47,6 @@ def configuration(tmp_path: Path) -> Configuration:
         logs_directory=tmp_path / "output" / "logs",
         annotation_model="llama3.1:8b",
         pipeline=PipelineConfiguration(
-            minimum_counts=5,
-            maximum_counts_quantile=0.99,
             minimum_cells=2,
             pca_n_components=5,
             neighborhood_colocalization_radius=25.0,

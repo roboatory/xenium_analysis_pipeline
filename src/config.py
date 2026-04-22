@@ -35,8 +35,6 @@ class Sample:
 class PipelineConfiguration:
     """Numeric parameters for the analysis pipeline."""
 
-    minimum_counts: int
-    maximum_counts_quantile: float
     minimum_cells: int
     pca_n_components: int
     neighborhood_colocalization_radius: float
@@ -55,8 +53,6 @@ class PipelineConfiguration:
         """Create from a raw dictionary (typically loaded from YAML)."""
 
         return cls(
-            minimum_counts=int(data["minimum_counts"]),
-            maximum_counts_quantile=float(data["maximum_counts_quantile"]),
             minimum_cells=int(data["minimum_cells"]),
             pca_n_components=int(data["pca_n_components"]),
             neighborhood_colocalization_radius=float(

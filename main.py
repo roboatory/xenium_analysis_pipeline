@@ -134,19 +134,9 @@ def run_preprocess_stage(configuration: Configuration) -> None:
     else:
         annotated_data.layers["counts"] = annotated_data.X.copy()
 
-    plotting.plot_qc_histogram(
-        configuration,
-        annotated_data,
-        [
-            configuration.pipeline.minimum_counts,
-            configuration.pipeline.maximum_counts_quantile,
-        ],
-        ["crimson", "goldenrod"],
-    )
+    # TODO(#16): faceted per-sample QC histogram with MAD cutoffs replaces the legacy global histogram
     preprocessing.filter_cells_and_genes(
         annotated_data,
-        configuration.pipeline.minimum_counts,
-        configuration.pipeline.maximum_counts_quantile,
         configuration.pipeline.minimum_cells,
     )
     preprocessing.normalize_and_scale(annotated_data)
@@ -154,7 +144,7 @@ def run_preprocess_stage(configuration: Configuration) -> None:
         annotated_data,
         configuration.pipeline.pca_n_components,
     )
-    analysis.run_umap(annotated_data)
+    plotting.plot_harmony_diagnostic(configuration, annotated_data)
     analysis.rank_genes(annotated_data)
     enriched_gene_lists = analysis.compute_enriched_genes(
         annotated_data,
@@ -196,7 +186,14 @@ def run_annotate_stage(configuration: Configuration) -> None:
         )
     )
 
-    # TODO(#16): UMAP-by-cluster and per-sample cluster overlay scatters
+    plotting.plot_umap_leiden(configuration, annotated_data)
+    for sample in configuration.samples:
+        plotting.plot_cluster_overlay(
+            configuration,
+            annotated_data,
+            cluster_key="cell_type",
+            sample_id=sample.id,
+        )
 
     io.write_processed_anndata(configuration, annotated_data)
 
@@ -236,7 +233,13 @@ def run_domains_stage(configuration: Configuration) -> None:
 
     io.write_labels(configuration, annotated_data, "domain")
 
-    # TODO(#16): per-sample spatial_domain_label overlay scatters
+    for sample in configuration.samples:
+        plotting.plot_cluster_overlay(
+            configuration,
+            annotated_data,
+            cluster_key="spatial_domain_label",
+            sample_id=sample.id,
+        )
 
     io.write_processed_anndata(configuration, annotated_data)
 
