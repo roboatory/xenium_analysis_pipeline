@@ -10,6 +10,7 @@ from .logging import get_logger
 logger = get_logger(__name__)
 
 _CONDITION = "prostate cancer"
+_ANNOTATION_BATCH_SIZE = 10
 
 
 def annotate_clusters_with_llm(
@@ -29,6 +30,52 @@ def annotate_clusters_with_llm(
         model,
         evidence_type,
     )
+    annotations: dict[str, dict[str, Any]] = {}
+    used_cell_type_labels: list[str] = []
+    batches = _batch_annotation_evidence(
+        annotation_evidence_by_cluster,
+        batch_size=_ANNOTATION_BATCH_SIZE,
+    )
+
+    for batch_index, batch in enumerate(batches, start=1):
+        if len(batches) > 1:
+            logger.info(
+                "annotating group batch %s/%s (%s groups)",
+                batch_index,
+                len(batches),
+                len(batch),
+            )
+        batch_annotations = _annotate_cluster_batch_with_llm(
+            batch,
+            model,
+            evidence_type,
+            host,
+            temperature,
+            seed,
+            timeout_seconds,
+            used_cell_type_labels,
+        )
+        annotations.update(batch_annotations)
+        used_cell_type_labels.extend(
+            annotation["cell_type"] for annotation in batch_annotations.values()
+        )
+
+    logger.info("annotated %s groups", len(annotations))
+    return annotations
+
+
+def _annotate_cluster_batch_with_llm(
+    annotation_evidence_by_cluster: dict[str, list[object]],
+    model: str,
+    evidence_type: str,
+    host: str,
+    temperature: float,
+    seed: int,
+    timeout_seconds: int,
+    used_cell_type_labels: list[str],
+) -> dict[str, dict[str, Any]]:
+    """Annotate one small batch of clusters using a local Ollama-compatible LLM."""
+
     is_marker_mode = evidence_type == "marker_genes"
     number_of_clusters = len(annotation_evidence_by_cluster)
     evidence_label = (
@@ -42,6 +89,11 @@ def annotate_clusters_with_llm(
         "set of already-used labels and rewrite any candidate label that would "
         "collide before you return JSON. "
     )
+    if used_cell_type_labels:
+        uniqueness_instruction += (
+            "You have already used these labels in previous batches and must not "
+            f"reuse them: {', '.join(used_cell_type_labels)}. "
+        )
     condition_context = f"{_CONDITION} spatial transcriptomics"
     system_instruction = (
         f"You are a domain expert in {condition_context}. "
@@ -72,6 +124,7 @@ def annotate_clusters_with_llm(
                     "content": _build_annotation_prompt(
                         annotation_evidence_by_cluster,
                         evidence_type,
+                        used_cell_type_labels,
                     ),
                 },
             ],
@@ -97,13 +150,29 @@ def annotate_clusters_with_llm(
         }
         for annotation in parsed_response["annotations"]
     }
-    logger.info("annotated %s groups", len(annotations))
     return annotations
+
+
+def _batch_annotation_evidence(
+    annotation_evidence_by_cluster: dict[str, list[object]],
+    batch_size: int,
+) -> list[dict[str, list[object]]]:
+    """Split cluster evidence into deterministic batches."""
+
+    sorted_items = sorted(
+        annotation_evidence_by_cluster.items(),
+        key=lambda item: item[0],
+    )
+    return [
+        dict(sorted_items[start : start + batch_size])
+        for start in range(0, len(sorted_items), batch_size)
+    ]
 
 
 def _build_annotation_prompt(
     annotation_evidence_by_cluster: dict[str, list[object]],
     evidence_type: str,
+    used_cell_type_labels: list[str] | None = None,
 ) -> str:
     """Build prompt with schema and per-cluster annotation evidence."""
 
@@ -157,6 +226,13 @@ def _build_annotation_prompt(
             "",
             f"Clusters and {evidence_label}:",
         ]
+    if used_cell_type_labels:
+        lines[-2:-2] = [
+            "Already-used labels from previous batches:",
+            ", ".join(used_cell_type_labels),
+            "Do not reuse any of these labels.",
+            "",
+        ]
     for cluster_id, evidence_items in sorted(
         annotation_evidence_by_cluster.items(), key=lambda item: item[0]
     ):
@@ -198,7 +274,7 @@ def _ollama_chat(
             if payload.get("stream"):
                 return _parse_streaming_ollama_response(response)
             body = response.read().decode("utf-8")
-    except (HTTPError, URLError) as error:
+    except (HTTPError, URLError, TimeoutError) as error:
         message = f"failed to reach local LLM at {url}: {error}"
         logger.error(message)
         raise RuntimeError(message) from error

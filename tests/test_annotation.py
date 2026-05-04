@@ -123,6 +123,18 @@ def test_annotate_clusters_with_llm_raises_on_network_error() -> None:
             )
 
 
+def test_annotate_clusters_with_llm_raises_on_timeout() -> None:
+    """A socket timeout surfaces as a descriptive RuntimeError."""
+
+    with patch.object(annotation, "urlopen", side_effect=TimeoutError("timed out")):
+        with pytest.raises(RuntimeError, match="failed to reach local LLM"):
+            annotation.annotate_clusters_with_llm(
+                {"0": ["KRT8"]},
+                model="llama3.1:8b",
+                evidence_type="marker_genes",
+            )
+
+
 def test_annotate_clusters_with_llm_raises_on_invalid_json() -> None:
     """A non-JSON response body surfaces as a descriptive RuntimeError."""
 
@@ -172,6 +184,62 @@ def test_annotate_clusters_with_llm_sends_expected_payload() -> None:
     assert captured["payload"]["stream"] is True
     assert captured["payload"]["keep_alive"] == "30m"
     assert captured["payload"]["options"] == {"temperature": 0.0, "seed": 42}
+
+
+def test_annotate_clusters_with_llm_batches_large_requests() -> None:
+    """Large annotation requests are split into smaller Ollama calls."""
+
+    captured_payloads: list[dict] = []
+
+    def fake_urlopen(request, timeout):
+        payload = json.loads(request.data.decode("utf-8"))
+        captured_payloads.append(payload)
+        user_message = next(
+            message["content"]
+            for message in payload["messages"]
+            if message["role"] == "user"
+        )
+        cluster_ids = [
+            line[2:].split(":", 1)[0].strip()
+            for line in user_message.splitlines()
+            if line.startswith("- ")
+        ]
+        return _FakeResponse(
+            _build_ollama_response_body(
+                [
+                    {
+                        "cluster_id": cluster_id,
+                        "cell_type": f"cell type {cluster_id}",
+                        "confidence": 0.5,
+                        "rationale": "",
+                    }
+                    for cluster_id in cluster_ids
+                ]
+            )
+        )
+
+    with patch.object(annotation, "urlopen", side_effect=fake_urlopen):
+        result = annotation.annotate_clusters_with_llm(
+            {
+                f"{cluster_id:02d}": ["KRT8"]
+                for cluster_id in range(annotation._ANNOTATION_BATCH_SIZE + 2)
+            },
+            model="llama3.1:8b",
+            evidence_type="marker_genes",
+        )
+
+    assert len(captured_payloads) == 2
+    assert len(result) == annotation._ANNOTATION_BATCH_SIZE + 2
+    assert "Already-used labels from previous batches" not in next(
+        message["content"]
+        for message in captured_payloads[0]["messages"]
+        if message["role"] == "user"
+    )
+    assert "Already-used labels from previous batches" in next(
+        message["content"]
+        for message in captured_payloads[1]["messages"]
+        if message["role"] == "user"
+    )
 
 
 def test_ollama_chat_accumulates_streamed_content() -> None:
